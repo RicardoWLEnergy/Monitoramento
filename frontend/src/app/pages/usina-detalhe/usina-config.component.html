@@ -1,0 +1,64 @@
+<form class="grade" (ngSubmit)="salvar()" (input)="salvo.set(false)">
+  <!-- ---------- Dados da usina ---------- -->
+  <section class="card">
+    <div>
+      <h3>Dados da usina</h3>
+      <span class="sub">Identificação e potência instalada</span>
+    </div>
+    <div class="campos">
+      <label class="campo largo"><span class="label">Nome</span>
+        <input class="input" name="nome" [(ngModel)]="form.nome" required></label>
+      <label class="campo"><span class="label">Cliente</span>
+        <input class="input" name="cliente" [(ngModel)]="form.cliente" required></label>
+      <label class="campo"><span class="label">Cidade</span>
+        <input class="input" name="cidade" [(ngModel)]="form.cidade"></label>
+      <label class="campo"><span class="label">Potência instalada (kWp)</span>
+        <input class="input num" type="number" step="0.01" min="0" name="potenciaKwp" [(ngModel)]="form.potenciaKwp"></label>
+    </div>
+  </section>
+
+  <!-- ---------- Integração ---------- -->
+  <section class="card">
+    <div>
+      <h3>Integração</h3>
+      <span class="sub">Origem dos dados de geração</span>
+    </div>
+    <div class="campos">
+      <label class="campo"><span class="label">Fabricante</span>
+        <select class="input" name="fabricante" [(ngModel)]="form.fabricante">
+          @for (f of fabricantes; track f) { <option [value]="f">{{ f }}</option> }
+        </select></label>
+      <label class="campo"><span class="label">ID na plataforma</span>
+        <input class="input num" name="idPlataforma" [(ngModel)]="form.config.idPlataforma"></label>
+    </div>
+  </section>
+
+  <!-- ---------- Geração e alertas ---------- -->
+  <section class="card">
+    <div>
+      <h3>Geração e alertas</h3>
+      <span class="sub">Base do "esperado" e quando avisar</span>
+    </div>
+    <div class="campos">
+      <label class="campo"><span class="label">Geração esperada (kWh/mês)</span>
+        <input class="input num" type="number" min="0" name="esperadoMesKwh" [(ngModel)]="form.esperadoMesKwh"></label>
+      <label class="campo"><span class="label">Alertar abaixo de (% do esperado)</span>
+        <input class="input num" type="number" min="0" max="100" name="limite" [(ngModel)]="form.config.limiteDesempenhoPct"></label>
+      <label class="campo"><span class="label">Considerar offline após (min)</span>
+        <input class="input num" type="number" min="5" step="5" name="offline" [(ngModel)]="form.config.minutosSemComunicacao"></label>
+      <label class="check largo">
+        <input type="checkbox" name="alertasAtivos" [(ngModel)]="form.config.alertasAtivos">
+        Gerar alertas para esta usina
+      </label>
+    </div>
+  </section>
+
+  <!-- ---------- Ações ---------- -->
+  <footer class="acoes">
+    @if (salvo()) { <span class="ok-msg">Alterações salvas (simulado, sem backend).</span> }
+    <button class="btn" type="button" (click)="descartar()">Descartar</button>
+    <button class="btn primary" type="submit" [disabled]="salvando()">
+      @if (salvando()) { <span class="spinner"></span> Salvando... } @else { Salvar alterações }
+    </button>
+  </footer>
+</form>

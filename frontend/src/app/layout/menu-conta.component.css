@@ -1,0 +1,49 @@
+/* Vive dentro da sidebar (sempre preta): usa os tokens --sb-* */
+:host { position: relative; display: block; }
+
+/* Fundo invisível que fecha o menu ao clicar fora */
+.veu { position: fixed; inset: 0; z-index: 1; }
+
+.usuario {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  width: calc(100% + 12px); margin: -6px; padding: 6px;
+  text-align: left; color: var(--sb-txt);
+  background: none; border: 0; border-radius: var(--radius-md); cursor: pointer;
+  transition: background 120ms var(--ease-out);
+}
+.usuario:hover, .usuario[aria-expanded="true"] { background: rgba(255, 255, 255, 0.06); }
+
+.avatar {
+  flex: none; width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--wl-orange); color: var(--wl-black);
+  font: 700 13px var(--font-display);
+}
+.info { flex: 1; min-width: 0; display: grid; }
+.info strong, .menu-topo strong { color: #fff; font-size: 13px; font-weight: 600; }
+.info small, .menu-topo small { color: var(--sb-label); font-size: 11.5px; }
+.info strong, .info small, .menu-topo small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seta { margin-left: auto; color: var(--sb-label); }
+
+/* Menu: abre para cima, sobre a sidebar */
+.menu {
+  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 3;
+  width: 100%; min-width: 210px; padding: 6px; display: grid; gap: 2px;
+  background: var(--wl-gray-900); border: 1px solid var(--sb-line); border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.menu-topo { display: grid; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--sb-line); }
+.menu-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: none; border: 0; color: var(--sb-txt); font: 500 13px var(--font-sans);
+  cursor: pointer; text-align: left;
+}
+.menu-item:hover { background: rgba(239, 150, 0, 0.14); color: var(--wl-orange); }
+
+/* Sidebar recolhida (desktop): só o avatar; o menu abre para fora, ao lado */
+@media (min-width: 901px) {
+  :host(.recolhida) .txt { display: none; }
+  :host(.recolhida) .usuario { justify-content: center; }
+  :host(.recolhida) .menu { left: calc(100% + 18px); bottom: 0; width: auto; }
+}

@@ -1,0 +1,62 @@
+<!-- Topo mobile: barra preta com borda inferior laranja -->
+<header class="topo-mobile">
+  <button class="hamburguer" type="button" (click)="menuAberto.set(!menuAberto())"
+          [attr.aria-expanded]="menuAberto()" aria-label="Abrir menu">
+    <lucide-icon [img]="icones.Menu" [size]="22" [strokeWidth]="1.7" />
+  </button>
+  <app-logo fundo="escuro" [altura]="24" />
+</header>
+
+<aside class="sidebar" [class.aberta]="menuAberto()">
+  <div class="sb-topo">
+    <app-logo class="sb-logo" fundo="escuro" [altura]="30" />
+    <button class="sb-recolher" type="button" (click)="alternarSidebar()"
+            [attr.title]="recolhida() ? 'Expandir menu' : 'Recolher menu'"
+            [attr.aria-label]="recolhida() ? 'Expandir menu' : 'Recolher menu'">
+      <lucide-icon [img]="recolhida() ? icones.PanelLeftOpen : icones.PanelLeftClose" [size]="18" [strokeWidth]="1.7" />
+    </button>
+  </div>
+
+  <nav class="sb-nav">
+    <div class="sb-label"><span class="txt">Monitoramento</span></div>
+    @for (item of monitoramento; track item.rota) {
+      <a class="sb-item" [routerLink]="item.rota" routerLinkActive="ativo"
+         [attr.title]="recolhida() ? item.rotulo : null">
+        <lucide-icon [img]="item.icone" [size]="18" [strokeWidth]="1.7" />
+        <span class="txt">{{ item.rotulo }}</span>
+      </a>
+    }
+
+    @if (auth.usuario()?.perfil === 'admin') {
+      <div class="sb-label"><span class="txt">Administração</span></div>
+      @for (item of administracao; track item.rota) {
+        <a class="sb-item" [routerLink]="item.rota" routerLinkActive="ativo"
+           [attr.title]="recolhida() ? item.rotulo : null">
+          <lucide-icon [img]="item.icone" [size]="18" [strokeWidth]="1.7" />
+          <span class="txt">{{ item.rotulo }}</span>
+        </a>
+      }
+    }
+  </nav>
+
+  <div class="sb-rodape">
+    <button class="sb-botao" type="button" (click)="tema.alternar()"
+            [attr.title]="'Tema ' + (tema.tema() === 'claro' ? 'escuro' : 'claro')">
+      <lucide-icon [img]="tema.tema() === 'claro' ? icones.Moon : icones.Sun" [size]="16" [strokeWidth]="1.7" />
+      <span class="txt">Tema {{ tema.tema() === 'claro' ? 'escuro' : 'claro' }}</span>
+    </button>
+
+    <!-- Usuário: clicar abre o menu da conta (Sair) -->
+    <app-menu-conta [recolhida]="recolhida()" (sair)="sair()" />
+  </div>
+</aside>
+
+@if (menuAberto()) {
+  <div class="veu" (click)="menuAberto.set(false)"></div>
+}
+
+<main class="conteudo">
+  <div class="conteudo-interno">
+    <router-outlet />
+  </div>
+</main>

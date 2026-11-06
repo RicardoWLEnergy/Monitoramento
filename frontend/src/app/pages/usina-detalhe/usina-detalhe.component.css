@@ -1,0 +1,40 @@
+:host { display: grid; gap: 24px; }
+
+.voltar {
+  display: inline-flex; align-items: center; gap: 6px; justify-self: start;
+  color: var(--muted); font-size: 13px; font-weight: 500;
+}
+.voltar:hover { color: var(--accent); }
+
+/* ---------- Cabeçalho ---------- */
+.cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-top: -8px; }
+.abas { margin-top: -8px; }
+.titulo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 2px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.meta span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ---------- KPIs ---------- */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.kpi-topo { display: flex; align-items: center; justify-content: space-between; color: var(--muted); }
+
+/* ---------- Cards ---------- */
+.card { display: grid; gap: 16px; }
+.card.sem-padding { padding: 0; overflow: hidden; gap: 0; }
+.card.sem-padding .card-topo { padding: 20px; }
+.card-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-topo h3 { font-size: 16px; font-weight: 700; }
+.sub { color: var(--muted); font-size: 12px; }
+.forte { font-weight: 600; }
+.icone-sub { color: var(--muted); }
+
+.grafico { height: 300px; width: 100%; }
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 1100px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .kpis { grid-template-columns: 1fr; }
+  .cabecalho { flex-direction: column; }
+  .grafico { height: 240px; }
+}

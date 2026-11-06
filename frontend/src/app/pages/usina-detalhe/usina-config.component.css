@@ -1,0 +1,20 @@
+.grade { display: grid; gap: 16px; }
+.card { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
+h3 { font-size: 16px; font-weight: 700; }
+.sub { color: var(--muted); font-size: 12px; }
+
+.campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.campo { display: grid; gap: 6px; }
+.largo { grid-column: 1 / -1; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+.acoes { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.ok-msg { color: var(--ok); font-size: 13px; font-weight: 500; margin-right: auto; }
+.btn.primary .spinner { border-color: rgba(0, 0, 0, 0.25); border-top-color: var(--wl-black); width: 14px; height: 14px; }
+
+@media (max-width: 900px) {
+  .card { grid-template-columns: 1fr; gap: 16px; }
+}
+@media (max-width: 600px) {
+  .campos { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,41 @@
+:host { display: grid; gap: 24px; }
+
+.cabecalho { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+
+/* ---------- Painel da tabela ---------- */
+.painel { display: grid; gap: 16px; padding: 0; overflow: hidden; }
+.painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 20px 0; }
+.busca { width: 100%; max-width: 320px; }
+
+.filtros { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 0 20px; }
+
+.usina-nome { display: block; font-weight: 600; color: var(--txt); }
+.usina-nome:hover { color: var(--accent); }
+.usina-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+.desempenho { display: inline-flex; align-items: center; gap: 8px; }
+.barra { width: 64px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.barra i { display: block; height: 100%; background: var(--wl-orange); }
+.barra i.baixo { background: var(--danger-txt); }
+
+.paginacao {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px 16px; border-top: 1px solid var(--line);
+}
+.paginas { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 600px) {
+  .painel-topo { flex-direction: column; align-items: stretch; }
+  .busca { max-width: none; }
+}
+
+.painel-topo h3 { font-size: 16px; }
+.chip .qtd { opacity: 0.6; margin-left: 2px; font-variant-numeric: tabular-nums; }
+
+.acoes { display: inline-flex; gap: 4px; }
+.acao {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-sm);
+  color: var(--muted); border: 1px solid transparent; transition: all 120ms var(--ease-out);
+}
+.acao:hover { color: var(--accent); border-color: var(--accent); }

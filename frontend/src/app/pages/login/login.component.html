@@ -1,0 +1,43 @@
+<div class="tela">
+  <form class="cartao" (ngSubmit)="entrar()">
+    <app-logo fundo="escuro" [altura]="40" />
+
+    <div class="cabecalho">
+      <div class="eyebrow">Monitoramento de usinas</div>
+      <h1>Acesse sua conta</h1>
+      <div class="filete"></div>
+    </div>
+
+    @if (erro()) {
+      <div class="alerta erro">{{ erro() }}</div>
+    }
+
+    <label class="campo">
+      <span class="label">E-mail</span>
+      <span class="com-icone">
+        <lucide-icon [img]="icones.Mail" [size]="16" [strokeWidth]="1.7" />
+        <input class="input" type="email" name="email" autocomplete="username"
+               placeholder="voce@empresa.com.br" [(ngModel)]="email" required>
+      </span>
+    </label>
+
+    <label class="campo">
+      <span class="label">Senha</span>
+      <span class="com-icone">
+        <lucide-icon [img]="icones.Lock" [size]="16" [strokeWidth]="1.7" />
+        <input class="input" type="password" name="senha" autocomplete="current-password"
+               placeholder="••••••••" [(ngModel)]="senha" required>
+      </span>
+    </label>
+
+    <button class="btn primary entrar" type="submit" [disabled]="carregando()">
+      @if (carregando()) {
+        <span class="spinner"></span> Entrando...
+      } @else {
+        Entrar <lucide-icon [img]="icones.ArrowRight" [size]="16" [strokeWidth]="2" />
+      }
+    </button>
+
+    <p class="aviso">Ambiente de desenvolvimento: login simulado, sem backend.</p>
+  </form>
+</div>

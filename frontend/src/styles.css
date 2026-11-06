@@ -1,0 +1,267 @@
+/* ==========================================================
+   W.L Energy — Monitoramento | Estilos globais e tokens da marca
+   Regra: telas usam SÓ variáveis semânticas (nada de cor fixa clara).
+   ========================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Paleta oficial */
+  --wl-black: #000000;
+  --wl-white: #ffffff;
+  --wl-gray-100: #f2f2f2;
+  --wl-gray-200: #e6e6e6;
+  --wl-gray-300: #d9d9d9;
+  --wl-gray-500: #a7a8a9;
+  --wl-gray-700: #4d4d4d;
+  --wl-gray-900: #1a1a1a;
+  --wl-orange: #ef9600;
+  --wl-orange-light: #f7c266;
+  --wl-orange-dark: #c97c00;
+  --wl-om: #003da5;
+  --wl-livre: #c0df16;
+  --wl-mobility: #a7a8a9;
+  --wl-danger: #e23b2e;
+
+  /* Acento */
+  --accent: var(--wl-orange);
+  --accent-hover: #ffab1f;
+  --accent-pressed: var(--wl-orange-dark);
+  --accent-contrast: #000000;
+
+  /* Tipografia */
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --tracking-tight: -0.02em;
+  --tracking-wider: 0.14em;
+
+  /* Forma */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --clip-tab: polygon(0 0, 100% 0, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+
+  /* Efeitos */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-accent: 0 8px 28px rgba(239, 150, 0, 0.32);
+
+  /* Sidebar (preta nos dois temas) */
+  --sb-bg: var(--wl-black);
+  --sb-txt: rgba(255, 255, 255, 0.72);
+  --sb-label: var(--wl-gray-500);
+  --sb-line: rgba(255, 255, 255, 0.12);
+  --sb-active-bg: var(--wl-gray-900);
+  --sb-active-txt: #ffffff;
+
+  /* Tema CLARO (padrão) */
+  --bg: var(--wl-gray-100);
+  --card: var(--wl-white);
+  --line: var(--wl-gray-200);
+  --hairline: var(--wl-gray-300);
+  --txt: var(--wl-black);
+  --muted: var(--wl-gray-700);
+  --input-bg: #ffffff;
+  --th-bg: #f6f6f7;
+  --th-txt: var(--wl-gray-700);
+  --row-hover: rgba(239, 150, 0, 0.05);
+  --kpi-bg: var(--wl-gray-100);
+  --ok: #1f7a33;          --ok-bg: #e3f0e5;
+  --info-txt: #2f5fc4;    --info-bg: #e3ecfa;
+  --warn-txt: var(--wl-orange-dark); --warn-bg: #fdeacc;
+  --danger-txt: var(--wl-danger);    --danger-bg: #fadedb;
+  --neutral-txt: var(--wl-gray-700); --neutral-bg: var(--wl-gray-200);
+}
+
+/* Tema ESCURO */
+html[data-theme="escuro"] {
+  color-scheme: dark;
+  --sb-active-bg: rgba(239, 150, 0, 0.14);
+  --sb-active-txt: var(--wl-orange);
+  --bg: #0d0d0d;
+  --card: var(--wl-gray-900);
+  --line: rgba(255, 255, 255, 0.10);
+  --hairline: rgba(255, 255, 255, 0.18);
+  --txt: #ffffff;
+  --muted: var(--wl-gray-500);
+  --input-bg: #000000;
+  --th-bg: #222222;
+  --th-txt: rgba(255, 255, 255, 0.66);
+  --row-hover: rgba(239, 150, 0, 0.07);
+  --kpi-bg: #262626;
+  --ok: #6fdd8b;          --ok-bg: rgba(52, 199, 108, 0.16);
+  --info-txt: #8fb4ee;    --info-bg: rgba(74, 127, 212, 0.18);
+  --warn-txt: var(--wl-orange-light); --warn-bg: rgba(239, 150, 0, 0.14);
+  --danger-txt: #ff6a5e;  --danger-bg: rgba(226, 59, 46, 0.16);
+  --neutral-txt: var(--wl-gray-500); --neutral-bg: rgba(255, 255, 255, 0.12);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--txt);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: var(--tracking-tight); margin: 0; }
+h1 { font-size: 26px; font-weight: 700; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+::selection { background: var(--wl-orange); color: var(--wl-black); }
+:focus-visible { outline: 2px solid var(--wl-orange); outline-offset: 2px; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--wl-orange); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- Labels ---------- */
+.eyebrow, .label {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: var(--tracking-wider); color: var(--muted);
+}
+
+/* ---------- Botões ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 18px; border-radius: var(--radius-md); border: 1px solid var(--hairline);
+  background: var(--card); color: var(--txt); font: 500 13px var(--font-sans);
+  cursor: pointer; transition: all 120ms var(--ease-out);
+}
+.btn:hover { border-color: var(--wl-orange); color: var(--wl-orange); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary {
+  background: var(--accent); border: none; color: var(--wl-black);
+  font-weight: 600; box-shadow: 0 4px 14px rgba(239, 150, 0, 0.28);
+}
+.btn.primary:hover { background: var(--accent-hover); color: var(--wl-black); }
+.btn.primary:active { background: var(--accent-pressed); box-shadow: none; }
+.btn.sm { padding: 6px 12px; font-size: 12px; border-radius: var(--radius-sm); }
+
+/* ---------- Cards e KPIs ---------- */
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 20px;
+}
+.kpi {
+  position: relative; overflow: hidden; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  padding: 13px 14px 13px 16px;
+}
+.kpi::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--wl-orange);
+}
+.kpi strong {
+  display: block; margin-top: 4px;
+  font: 700 21px var(--font-display); font-variant-numeric: tabular-nums;
+}
+.kpi small { color: var(--muted); font-size: 12px; }
+
+/* ---------- Inputs ---------- */
+.input {
+  width: 100%; padding: 9px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline); background: var(--input-bg); color: var(--txt);
+  font: 400 14px var(--font-sans); transition: border-color 120ms var(--ease-out);
+}
+.input:focus { outline: 2px solid var(--wl-orange); outline-offset: -1px; border-color: transparent; }
+.input::placeholder { color: var(--muted); opacity: 0.7; }
+
+/* Input com ícone à esquerda: <span class="com-icone"><lucide-icon/><input class="input"></span> */
+.com-icone { position: relative; display: block; }
+.com-icone lucide-icon {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); pointer-events: none; display: flex;
+}
+.com-icone .input { padding-left: 36px; }
+
+/* Ícones Lucide alinhados ao texto */
+lucide-icon { display: inline-flex; flex: none; }
+
+/* ---------- Tags de status ---------- */
+.tag {
+  display: inline-block; padding: 3px 11px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.tag.ok      { color: var(--ok);          background: var(--ok-bg); }
+.tag.info    { color: var(--info-txt);    background: var(--info-bg); }
+.tag.warn    { color: var(--warn-txt);    background: var(--warn-bg); }
+.tag.danger  { color: var(--danger-txt);  background: var(--danger-bg); }
+.tag.neutral { color: var(--neutral-txt); background: var(--neutral-bg); }
+
+/* ---------- Chips de filtro ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  padding: 5px 13px; border-radius: 999px; border: 1px solid var(--hairline);
+  background: transparent; color: var(--txt); font: 500 12px var(--font-sans);
+  cursor: pointer; transition: all 120ms var(--ease-out);
+}
+.chip:hover { border-color: var(--wl-orange); }
+.chip.ativo { background: var(--accent); border-color: var(--accent); color: var(--wl-black); font-weight: 600; }
+
+/* ---------- Tabela ---------- */
+.tabela-wrap { overflow-x: auto; }
+.tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tabela th {
+  background: var(--th-bg); color: var(--th-txt); text-align: left;
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: var(--tracking-wider); padding: 10px 12px; white-space: nowrap;
+  user-select: none;
+}
+.tabela th.ordenavel { cursor: pointer; }
+.tabela th.ordenavel:hover { color: var(--txt); }
+.tabela th .seta { color: var(--wl-orange); margin-left: 4px; }
+.tabela td { padding: 11px 12px; border-top: 1px solid var(--line); }
+.tabela tbody tr { transition: background 120ms var(--ease-out); }
+.tabela tbody tr:hover { background: var(--row-hover); }
+.tabela .dir { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Alerta ---------- */
+.alerta {
+  padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px;
+  border-left: 3px solid var(--wl-orange); background: var(--warn-bg); color: var(--txt);
+}
+.alerta.erro { border-left-color: var(--wl-danger); background: var(--danger-bg); }
+
+/* ---------- Estado vazio ---------- */
+.vazio {
+  border: 1px dashed var(--hairline); border-radius: var(--radius-md);
+  padding: 40px 20px; text-align: center; color: var(--muted);
+}
+
+/* ---------- Loading ---------- */
+.spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--hairline); border-top-color: var(--wl-orange);
+  animation: girar 0.8s linear infinite; display: inline-block;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* ---------- Marca (wordmark em texto até termos os PNGs do logo) ---------- */
+.marca { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-display); }
+.marca b { font-size: 20px; font-weight: 700; letter-spacing: var(--tracking-tight); color: #fff; }
+.marca span {
+  background: var(--wl-orange); color: var(--wl-black); font-size: 10px; font-weight: 700;
+  letter-spacing: var(--tracking-wider); padding: 3px 8px 3px 10px; clip-path: var(--clip-tab);
+}
+
+.tab-chamfer { clip-path: var(--clip-tab); }
+
+/* ---------- Abas ---------- */
+.abas { display: flex; gap: 24px; border-bottom: 1px solid var(--line); }
+.aba {
+  position: relative; padding: 10px 0; margin-bottom: -1px;
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--muted); font: 600 14px var(--font-sans); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+}
+.aba:hover { color: var(--txt); }
+.aba.ativa { color: var(--txt); border-bottom-color: var(--wl-orange); }
+
+select.input { appearance: auto; }

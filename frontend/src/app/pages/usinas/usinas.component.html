@@ -1,0 +1,104 @@
+<header class="cabecalho">
+  <div>
+    <div class="eyebrow">Monitoramento</div>
+    <h1>Usinas</h1>
+  </div>
+  <span class="tag neutral">Dados simulados</span>
+</header>
+
+<!-- ---------- Tabela de usinas ---------- -->
+<section class="card painel">
+  <div class="painel-topo">
+    <h3>{{ contagem().total }} usinas · <span class="num">{{ contagem().kwp | number: '1.2-2' }} kWp</span></h3>
+    <span class="com-icone busca">
+      <lucide-icon [img]="icones.Search" [size]="16" [strokeWidth]="1.7" />
+      <input class="input" type="search" placeholder="Buscar usina, cliente ou cidade"
+             [value]="busca()" (input)="definirBusca($any($event.target).value)">
+    </span>
+  </div>
+
+  <div class="filtros">
+    <div class="chips">
+      <button class="chip" [class.ativo]="filtroStatus() === 'todas'" (click)="definirStatus('todas')">Todas <span class="qtd">{{ contagem().todas }}</span></button>
+      <button class="chip" [class.ativo]="filtroStatus() === 'online'" (click)="definirStatus('online')">Online <span class="qtd">{{ contagem().online }}</span></button>
+      <button class="chip" [class.ativo]="filtroStatus() === 'alerta'" (click)="definirStatus('alerta')">Alerta <span class="qtd">{{ contagem().alerta }}</span></button>
+      <button class="chip" [class.ativo]="filtroStatus() === 'offline'" (click)="definirStatus('offline')">Offline <span class="qtd">{{ contagem().offline }}</span></button>
+    </div>
+    <div class="chips">
+      @for (f of fabricantes; track f) {
+        <button class="chip" [class.ativo]="filtroFabricante() === f" (click)="alternarFabricante(f)">{{ f }}</button>
+      }
+    </div>
+  </div>
+
+  <div class="tabela-wrap">
+    <table class="tabela">
+      <thead>
+        <tr>
+          <th class="ordenavel" (click)="ordenar('nome')">Usina<span class="seta">{{ seta('nome') }}</span></th>
+          <th class="ordenavel" (click)="ordenar('fabricante')">Fabricante<span class="seta">{{ seta('fabricante') }}</span></th>
+          <th class="ordenavel dir" (click)="ordenar('potenciaKwp')">Instalada<span class="seta">{{ seta('potenciaKwp') }}</span></th>
+          <th class="ordenavel dir" (click)="ordenar('potenciaAtualKw')">Agora<span class="seta">{{ seta('potenciaAtualKw') }}</span></th>
+          <th class="ordenavel dir" (click)="ordenar('geracaoHojeKwh')">Hoje<span class="seta">{{ seta('geracaoHojeKwh') }}</span></th>
+          <th class="ordenavel dir" (click)="ordenar('desempenho')">Mês vs. esperado<span class="seta">{{ seta('desempenho') }}</span></th>
+          <th class="ordenavel" (click)="ordenar('status')">Status<span class="seta">{{ seta('status') }}</span></th>
+          <th class="dir">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (u of paginaAtual(); track u.id) {
+          <tr>
+            <td>
+              <a class="usina-nome" [routerLink]="['/usinas', u.id]">{{ u.nome }}</a>
+              <div class="usina-sub">{{ u.cliente }} · {{ u.cidade }}</div>
+            </td>
+            <td>{{ u.fabricante }}</td>
+            <td class="dir">{{ u.potenciaKwp | number: '1.2-2' }} kWp</td>
+            <td class="dir">{{ u.potenciaAtualKw | number: '1.1-1' }} kW</td>
+            <td class="dir">{{ u.geracaoHojeKwh | number: '1.1-1' }} kWh</td>
+            <td class="dir">
+              <div class="desempenho">
+                <span class="barra"><i [style.width.%]="desempenho(u) > 100 ? 100 : desempenho(u)"
+                   [class.baixo]="desempenho(u) < 85"></i></span>
+                {{ desempenho(u) | number: '1.0-0' }}%
+              </div>
+            </td>
+            <td>
+              <span class="tag" [class]="classeStatus[u.status]">{{ rotuloStatus[u.status] }}</span>
+              <div class="usina-sub">{{ ultimaLeitura(u.ultimaLeitura) }}</div>
+            </td>
+            <td class="dir">
+              <div class="acoes">
+                <a class="acao" [routerLink]="['/usinas', u.id]" title="Geração" aria-label="Ver geração">
+                  <lucide-icon [img]="icones.ChartLine" [size]="16" [strokeWidth]="1.7" />
+                </a>
+                <a class="acao" [routerLink]="['/usinas', u.id]" [queryParams]="{ aba: 'configuracoes' }"
+                   title="Configurações" aria-label="Configurações da usina">
+                  <lucide-icon [img]="icones.Settings" [size]="16" [strokeWidth]="1.7" />
+                </a>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="8">
+              <div class="vazio">
+                Nenhuma usina encontrada com esses filtros.<br>
+                <a href="" (click)="$event.preventDefault(); definirBusca(''); definirStatus('todas'); filtroFabricante.set(null)">Limpar filtros</a>
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="paginacao">
+    <span class="label">{{ intervalo() }}</span>
+    <div class="paginas">
+      <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1"><lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> Anterior</button>
+      <span class="num">{{ pagina() }} / {{ totalPaginas() }}</span>
+      <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()">Próxima <lucide-icon [img]="icones.ChevronRight" [size]="14" [strokeWidth]="2" /></button>
+    </div>
+  </footer>
+</section>

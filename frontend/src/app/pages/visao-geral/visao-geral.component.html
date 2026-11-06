@@ -1,0 +1,120 @@
+<header class="cabecalho">
+  <div>
+    <div class="eyebrow">{{ hoje }}</div>
+    <h1>Visão geral</h1>
+  </div>
+  <span class="tag neutral">Dados simulados</span>
+</header>
+
+<!-- ---------- KPIs ---------- -->
+<section class="kpis">
+  <div class="kpi">
+    <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
+    <strong>{{ kpis().geracaoHojeKwh | number: '1.0-0' }} kWh</strong>
+    <small>{{ kpis().potenciaAtualKw | number: '1.1-1' }} kW gerando agora</small>
+  </div>
+
+  <div class="kpi">
+    <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
+    <strong>{{ kpis().geracaoMesMwh | number: '1.2-2' }} MWh</strong>
+    <small>{{ kpis().desempenhoMes | number: '1.0-0' }}% do esperado</small>
+  </div>
+
+  <div class="kpi">
+    <div class="kpi-topo"><span class="label">Potência instalada</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
+    <strong>{{ kpis().potenciaInstaladaKwp | number: '1.2-2' }} kWp</strong>
+    <small>{{ kpis().total }} usinas monitoradas</small>
+  </div>
+
+  <div class="kpi">
+    <div class="kpi-topo"><span class="label">Status das usinas</span><lucide-icon [img]="icones.Activity" [size]="16" [strokeWidth]="1.7" /></div>
+    <div class="status-resumo">
+      <a routerLink="/usinas" [queryParams]="{ status: 'online' }"><b class="ok">{{ kpis().online }}</b> online</a>
+      <a routerLink="/usinas" [queryParams]="{ status: 'alerta' }"><b class="warn">{{ kpis().alerta }}</b> alerta</a>
+      <a routerLink="/usinas" [queryParams]="{ status: 'offline' }"><b class="danger">{{ kpis().offline }}</b> offline</a>
+    </div>
+  </div>
+</section>
+
+<!-- ---------- Linha 1: curva do dia + atenção ---------- -->
+<section class="linha">
+  <div class="card">
+    <div class="card-topo">
+      <div>
+        <h3>Geração da carteira hoje</h3>
+        <span class="sub">Potência somada de todas as usinas</span>
+      </div>
+    </div>
+    <div class="grafico" echarts [options]="opcoesCurva()"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-topo">
+      <div>
+        <h3>Precisam de atenção</h3>
+        <span class="sub">{{ atencao().length }} usina(s) fora do normal</span>
+      </div>
+    </div>
+    @if (atencao().length) {
+      <ul class="lista">
+        @for (u of atencao(); track u.id) {
+          <li>
+            <a [routerLink]="['/usinas', u.id]">
+              <span class="icone" [class.danger]="u.status === 'offline'" [class.warn]="u.status === 'alerta'">
+                <lucide-icon [img]="u.status === 'offline' ? icones.WifiOff : icones.TriangleAlert" [size]="16" [strokeWidth]="1.7" />
+              </span>
+              <span class="item-txt">
+                <strong>{{ u.nome }}</strong>
+                <small>
+                  @if (u.status === 'offline') { Sem comunicação {{ ultimaLeitura(u.ultimaLeitura) }} }
+                  @else { Geração abaixo do esperado }
+                </small>
+              </span>
+              <span class="tag" [class.danger]="u.status === 'offline'" [class.warn]="u.status === 'alerta'">
+                {{ u.status === 'offline' ? 'Offline' : 'Alerta' }}
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+    } @else {
+      <div class="vazio">Todas as usinas operando normalmente.</div>
+    }
+  </div>
+</section>
+
+<!-- ---------- Linha 2: histórico + menor desempenho ---------- -->
+<section class="linha">
+  <div class="card">
+    <div class="card-topo">
+      <div>
+        <h3>Geração mensal da carteira</h3>
+        <span class="sub">Últimos 12 meses · gerado × esperado</span>
+      </div>
+    </div>
+    <div class="grafico" echarts [options]="opcoesMensal()"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-topo">
+      <div>
+        <h3>Menor desempenho no mês</h3>
+        <span class="sub">Gerado em relação ao esperado</span>
+      </div>
+    </div>
+    <ul class="lista ranking">
+      @for (r of menorDesempenho(); track r.usina.id) {
+        <li>
+          <a [routerLink]="['/usinas', r.usina.id]">
+            <span class="item-txt">
+              <strong>{{ r.usina.nome }}</strong>
+              <span class="medidor"><i [style.width.%]="r.pct > 100 ? 100 : r.pct" [class.baixo]="r.pct < 85"></i></span>
+            </span>
+            <span class="pct num">{{ r.pct | number: '1.0-0' }}%</span>
+          </a>
+        </li>
+      }
+    </ul>
+    <a class="ver-todas" routerLink="/usinas">Ver todas as usinas →</a>
+  </div>
+</section>
