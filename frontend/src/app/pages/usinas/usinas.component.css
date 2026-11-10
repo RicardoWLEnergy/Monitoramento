@@ -39,3 +39,6 @@
   color: var(--muted); border: 1px solid transparent; transition: all 120ms var(--ease-out);
 }
 .acao:hover { color: var(--accent); border-color: var(--accent); }
+
+.margem { margin: 0 20px; }
+.tabela-wrap.carregando { opacity: 0.55; transition: opacity 120ms var(--ease-out); }

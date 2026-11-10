@@ -1,64 +1,191 @@
-<form class="grade" (ngSubmit)="salvar()" (input)="salvo.set(false)">
-  <!-- ---------- Dados da usina ---------- -->
+<div class="grade">
+  <!-- ---------- Dados da usina (somente leitura) ---------- -->
   <section class="card">
     <div>
       <h3>Dados da usina</h3>
-      <span class="sub">Identificação e potência instalada</span>
+      <span class="sub">Vêm da plataforma {{ usina().plataforma_nome }}. Para corrigir, altere no portal do fabricante.</span>
     </div>
-    <div class="campos">
-      <label class="campo largo"><span class="label">Nome</span>
-        <input class="input" name="nome" [(ngModel)]="form.nome" required></label>
-      <label class="campo"><span class="label">Cliente</span>
-        <input class="input" name="cliente" [(ngModel)]="form.cliente" required></label>
-      <label class="campo"><span class="label">Cidade</span>
-        <input class="input" name="cidade" [(ngModel)]="form.cidade"></label>
-      <label class="campo"><span class="label">Potência instalada (kWp)</span>
-        <input class="input num" type="number" step="0.01" min="0" name="potenciaKwp" [(ngModel)]="form.potenciaKwp"></label>
-    </div>
+    <dl class="dados">
+      <div><dt class="label">Nome</dt><dd>{{ usina().nome }}</dd></div>
+      <div><dt class="label">Fabricante</dt><dd>{{ usina().fabricante_nome }}</dd></div>
+      <div><dt class="label">Plataforma</dt><dd>{{ usina().plataforma_nome }}</dd></div>
+      <div><dt class="label">ID na plataforma</dt><dd class="num">{{ usina().id_externo }}</dd></div>
+      <div><dt class="label">Potência instalada</dt><dd>{{ usina().potencia_kwp | number: '1.2-2' }} kWp</dd></div>
+      <div><dt class="label">Fuso horário</dt><dd>{{ usina().fuso_horario }}</dd></div>
+      <div class="largo">
+        <dt class="label">Endereço</dt>
+        <dd>
+          {{ usina().endereco || '—' }}{{ usina().cidade ? ', ' + usina().cidade : '' }}
+          @if (usina().link_maps) {
+            <a class="link-ext" [href]="usina().link_maps" target="_blank" rel="noopener">
+              Abrir no Google Maps <lucide-icon [img]="icones.ExternalLink" [size]="12" [strokeWidth]="1.7" />
+            </a>
+          }
+        </dd>
+      </div>
+    </dl>
   </section>
 
-  <!-- ---------- Integração ---------- -->
+  <!-- ---------- Histórico de geração ---------- -->
   <section class="card">
     <div>
-      <h3>Integração</h3>
-      <span class="sub">Origem dos dados de geração</span>
+      <h3>Histórico de geração</h3>
+      <span class="sub">Busca na plataforma a geração de dias anteriores e grava no sistema. Pode repetir: nada é duplicado.</span>
     </div>
-    <div class="campos">
-      <label class="campo"><span class="label">Fabricante</span>
-        <select class="input" name="fabricante" [(ngModel)]="form.fabricante">
-          @for (f of fabricantes; track f) { <option [value]="f">{{ f }}</option> }
-        </select></label>
-      <label class="campo"><span class="label">ID na plataforma</span>
-        <input class="input num" name="idPlataforma" [(ngModel)]="form.config.idPlataforma"></label>
+    <div class="campos-col">
+      @if (cobertura(); as c) {
+        <dl class="dados">
+          <div>
+            <dt class="label">Energia diária no sistema</dt>
+            <dd>
+              @if (c.energia_diaria.dias) {
+                {{ c.energia_diaria.dias }} dia(s) · {{ dataBR(c.energia_diaria.inicio) }} a {{ dataBR(c.energia_diaria.fim) }}
+              } @else { Nenhum dia importado }
+            </dd>
+          </div>
+          <div>
+            <dt class="label">Curva de 5 min no sistema</dt>
+            <dd>
+              @if (c.curvas.dias) {
+                {{ c.curvas.dias }} dia(s) · {{ dataBR(c.curvas.inicio) }} a {{ dataBR(c.curvas.fim) }}
+              } @else { Nenhum dia importado }
+            </dd>
+          </div>
+        </dl>
+      }
+
+      <div class="chips">
+        @for (a of atalhos; track a.dias) {
+          <button class="chip" type="button" (click)="usarAtalho(a.dias)">Últimos {{ a.rotulo }}</button>
+        }
+      </div>
+      <div class="campos">
+        <label class="campo"><span class="label">De</span>
+          <input class="input" type="date" name="hist-inicio" [(ngModel)]="periodo.inicio" [max]="periodo.fim"></label>
+        <label class="campo"><span class="label">Até</span>
+          <input class="input" type="date" name="hist-fim" [(ngModel)]="periodo.fim" [max]="hoje"></label>
+        <label class="check largo">
+          <input type="checkbox" name="hist-curvas" [(ngModel)]="periodo.curvas">
+          Importar também a curva de 5 minutos (mais lento)
+        </label>
+      </div>
+      @if (cobertura(); as c) {
+        <span class="sub">O sistema guarda curvas de 5 min a partir de {{ dataBR(c.limite_curvas) }}; a energia diária, sem limite.</span>
+      }
+
+      <div class="rodape-secao">
+        <span class="sub">Tempo estimado: <b>{{ estimativaTexto }}</b> · não feche a página durante a importação.</span>
+        @if (aviso()['historico']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
+        <button class="btn primary" type="button" (click)="importarHistorico()" [disabled]="salvando() === 'historico'">
+          @if (salvando() === 'historico') { <span class="spinner"></span> Importando... }
+          @else { <lucide-icon [img]="icones.Download" [size]="16" [strokeWidth]="1.8" /> Importar dados }
+        </button>
+      </div>
     </div>
   </section>
 
-  <!-- ---------- Geração e alertas ---------- -->
+  <!-- ---------- Clientes vinculados ---------- -->
   <section class="card">
     <div>
-      <h3>Geração e alertas</h3>
-      <span class="sub">Base do "esperado" e quando avisar</span>
+      <h3>Clientes vinculados</h3>
+      <span class="sub">Quem vê esta usina no sistema</span>
     </div>
-    <div class="campos">
-      <label class="campo"><span class="label">Geração esperada (kWh/mês)</span>
-        <input class="input num" type="number" min="0" name="esperadoMesKwh" [(ngModel)]="form.esperadoMesKwh"></label>
-      <label class="campo"><span class="label">Alertar abaixo de (% do esperado)</span>
-        <input class="input num" type="number" min="0" max="100" name="limite" [(ngModel)]="form.config.limiteDesempenhoPct"></label>
-      <label class="campo"><span class="label">Considerar offline após (min)</span>
-        <input class="input num" type="number" min="5" step="5" name="offline" [(ngModel)]="form.config.minutosSemComunicacao"></label>
-      <label class="check largo">
-        <input type="checkbox" name="alertasAtivos" [(ngModel)]="form.config.alertasAtivos">
-        Gerar alertas para esta usina
-      </label>
+    <div class="campos-col">
+      @for (c of usina().clientes ?? []; track c.id) {
+        <div class="cliente">
+          <span><strong>{{ c.nome }}</strong><small>{{ c.email }}</small></span>
+          <button class="btn sm" type="button" (click)="desvincular(c.id, c.nome)" [disabled]="salvando() === 'clientes'">
+            <lucide-icon [img]="icones.X" [size]="14" [strokeWidth]="2" /> Desvincular
+          </button>
+        </div>
+      } @empty {
+        <div class="vazio pequeno">Nenhum cliente vinculado.</div>
+      }
+      <a routerLink="/clientes" class="sub-link">Vincular um cliente (em Clientes, com a SN do inversor) →</a>
+      @if (aviso()['clientes']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
     </div>
   </section>
 
-  <!-- ---------- Ações ---------- -->
-  <footer class="acoes">
-    @if (salvo()) { <span class="ok-msg">Alterações salvas (simulado, sem backend).</span> }
-    <button class="btn" type="button" (click)="descartar()">Descartar</button>
-    <button class="btn primary" type="submit" [disabled]="salvando()">
-      @if (salvando()) { <span class="spinner"></span> Salvando... } @else { Salvar alterações }
-    </button>
-  </footer>
-</form>
+  <!-- ---------- Geração esperada ---------- -->
+  <section class="card">
+    <div>
+      <h3>Geração esperada</h3>
+      <span class="sub">kWh por mês · base do "gerado × esperado"</span>
+      @if (!auth.eAdmin()) { <span class="sub somente">Somente administradores alteram.</span> }
+    </div>
+    <div class="campos-col">
+      <div class="meses">
+        @for (m of meses; track m; let i = $index) {
+          <label class="campo">
+            <span class="label">{{ m }}</span>
+            <input class="input num" type="number" min="0" step="1" [name]="'mes' + i"
+                   [(ngModel)]="esperado[i]" [disabled]="!auth.eAdmin()">
+          </label>
+        }
+      </div>
+      <div class="rodape-secao">
+        <span class="sub">Total no ano: <b class="num">{{ totalEsperado | number: '1.0-0' }} kWh</b></span>
+        @if (aviso()['esperado']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
+        @if (auth.eAdmin()) {
+          <button class="btn primary" type="button" (click)="salvarEsperado()" [disabled]="salvando() === 'esperado'">
+            {{ salvando() === 'esperado' ? 'Salvando...' : 'Salvar geração esperada' }}
+          </button>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- Alertas ---------- -->
+  <section class="card">
+    <div>
+      <h3>Alertas</h3>
+      <span class="sub">Quando avisar sobre esta usina</span>
+      @if (!auth.eAdmin()) { <span class="sub somente">Somente administradores alteram.</span> }
+    </div>
+    <div class="campos-col">
+      <div class="campos">
+        <label class="campo"><span class="label">Alertar abaixo de (% do esperado)</span>
+          <input class="input num" type="number" min="1" max="100" name="limite"
+                 [(ngModel)]="alertas.limite_desempenho_pct" [disabled]="!auth.eAdmin()"></label>
+        <label class="campo"><span class="label">Considerar offline após (min)</span>
+          <input class="input num" type="number" min="5" step="5" name="offline"
+                 [(ngModel)]="alertas.minutos_sem_comunicacao" [disabled]="!auth.eAdmin()"></label>
+        <label class="check largo">
+          <input type="checkbox" name="alertasAtivos" [(ngModel)]="alertas.alertas_ativos" [disabled]="!auth.eAdmin()">
+          Gerar alertas para esta usina
+        </label>
+      </div>
+      <div class="rodape-secao">
+        @if (aviso()['alertas']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
+        @if (auth.eAdmin()) {
+          <button class="btn primary" type="button" (click)="salvarAlertas()" [disabled]="salvando() === 'alertas'">
+            {{ salvando() === 'alertas' ? 'Salvando...' : 'Salvar alertas' }}
+          </button>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- Apagar usina (só Admin) ---------- -->
+  @if (auth.eAdmin()) {
+    <section class="card perigo">
+      <div>
+        <h3>Apagar usina</h3>
+        <span class="sub">Só administradores.</span>
+      </div>
+      <div class="campos-col">
+        <p class="texto">
+          A usina some do sistema e os clientes vinculados perdem o acesso. O histórico de geração
+          <b>fica guardado</b>: se a SN de um inversor dela for cadastrada de novo, ela volta a ficar ativa com todos os dados.
+        </p>
+        <div class="rodape-secao">
+          @if (aviso()['apagar']; as a) { <span class="erro-msg">{{ a.texto }}</span> }
+          <button class="btn perigo" type="button" (click)="apagarUsina()" [disabled]="salvando() === 'apagar'">
+            <lucide-icon [img]="icones.Trash2" [size]="16" [strokeWidth]="1.8" />
+            {{ salvando() === 'apagar' ? 'Apagando...' : 'Apagar usina' }}
+          </button>
+        </div>
+      </div>
+    </section>
+  }
+</div>

@@ -1,0 +1,44 @@
+:host { display: grid; gap: 24px; }
+
+.cabecalho { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+h3 { font-size: 16px; font-weight: 700; }
+.sub { display: block; color: var(--muted); font-size: 12px; }
+.forte { font-weight: 600; }
+
+.alerta.sucesso { border-left-color: var(--ok); background: var(--ok-bg); display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- Formulário ---------- */
+.painel-form { display: grid; gap: 18px; border-color: var(--wl-orange); }
+.painel-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+legend { padding: 0; margin-bottom: 12px; }
+.campos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.campo { display: grid; gap: 6px; }
+.largo { grid-column: span 2; }
+.dica { margin: 0; color: var(--muted); font-size: 12px; }
+.acoes-form { display: flex; justify-content: flex-end; gap: 10px; }
+.acoes-form .spinner { border-color: rgba(0, 0, 0, 0.25); border-top-color: var(--wl-black); width: 14px; height: 14px; }
+
+/* ---------- Lista ---------- */
+.lista { padding: 0; overflow: hidden; display: grid; gap: 16px; }
+.lista-topo { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 20px 0; }
+.busca { width: 100%; max-width: 340px; }
+.mapa { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; }
+.mapa:hover { color: var(--accent); }
+.usina { display: block; font-size: 13px; }
+.acoes { display: inline-flex; gap: 6px; }
+.paginacao {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px 16px; border-top: 1px solid var(--line);
+}
+.paginas { display: flex; gap: 10px; }
+
+@media (max-width: 900px) {
+  .campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .campos { grid-template-columns: 1fr; }
+  .largo { grid-column: auto; }
+  .lista-topo, .cabecalho { flex-direction: column; align-items: stretch; }
+  .busca { max-width: none; }
+}

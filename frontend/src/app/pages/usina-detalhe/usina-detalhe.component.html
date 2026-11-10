@@ -2,157 +2,180 @@
   <lucide-icon [img]="icones.ArrowLeft" [size]="16" [strokeWidth]="1.7" /> Usinas
 </a>
 
-@if (usina(); as u) {
+@let u = usina();
+@if (carregando() && !u) {
+  <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
+} @else if (erro()) {
+  <div class="alerta erro">{{ erro() }} <a href="" (click)="$event.preventDefault(); carregar()">Tentar de novo →</a></div>
+} @else if (u) {
   <!-- ---------- Cabeçalho ---------- -->
   <header class="cabecalho">
     <div>
-      <div class="eyebrow">Usina · {{ u.fabricante }}</div>
+      <div class="eyebrow">Usina · {{ u.fabricante_nome }} · {{ u.plataforma_nome }}</div>
       <div class="titulo">
         <h1>{{ u.nome }}</h1>
         <span class="tag" [class]="classeStatus[u.status]">{{ rotuloStatus[u.status] }}</span>
       </div>
       <div class="meta">
-        <span><lucide-icon [img]="icones.MapPin" [size]="14" [strokeWidth]="1.7" /> {{ u.cidade }}</span>
-        <span>{{ u.cliente }}</span>
-        <span class="num">{{ u.potenciaKwp | number: '1.2-2' }} kWp</span>
+        @if (u.link_maps) {
+          <a class="mapa" [href]="u.link_maps" target="_blank" rel="noopener" title="Abrir no Google Maps">
+            <lucide-icon [img]="icones.MapPin" [size]="14" [strokeWidth]="1.7" />
+            {{ u.cidade || u.endereco }}{{ u.uf ? ' - ' + u.uf : '' }}
+            <lucide-icon [img]="icones.ExternalLink" [size]="12" [strokeWidth]="1.7" />
+          </a>
+        }
+        <span class="num">{{ u.potencia_kwp | number: '1.2-2' }} kWp</span>
+        <span>{{ inversores().length }} inversor(es)</span>
       </div>
     </div>
-    <span class="tag neutral">Dados simulados</span>
   </header>
 
-  <nav class="abas">
-    <button class="aba" type="button" [class.ativa]="aba() === 'geracao'" (click)="irParaAba('geracao')">
-      <lucide-icon [img]="icones.ChartLine" [size]="16" [strokeWidth]="1.7" /> Geração
-    </button>
-    <button class="aba" type="button" [class.ativa]="aba() === 'configuracoes'" (click)="irParaAba('configuracoes')">
-      <lucide-icon [img]="icones.Settings" [size]="16" [strokeWidth]="1.7" /> Configurações
-    </button>
-  </nav>
-
-  @if (aba() === 'configuracoes') {
-    <app-usina-config [usina]="u" />
-  } @else {
-  @if (u.status !== 'online') {
-    <div class="alerta" [class.erro]="u.status === 'offline'">
-      @if (u.status === 'offline') {
-        Sem comunicação desde {{ ultimaLeitura(u.ultimaLeitura) }}. Verifique a conexão do datalogger.
-      } @else {
-        Geração abaixo do esperado em um ou mais inversores.
-      }
-    </div>
+  @if (auth.eEquipe()) {
+    <nav class="abas">
+      <button class="aba" type="button" [class.ativa]="aba() === 'geracao'" (click)="irParaAba('geracao')">
+        <lucide-icon [img]="icones.ChartLine" [size]="16" [strokeWidth]="1.7" /> Geração
+      </button>
+      <button class="aba" type="button" [class.ativa]="aba() === 'configuracoes'" (click)="irParaAba('configuracoes')">
+        <lucide-icon [img]="icones.Settings" [size]="16" [strokeWidth]="1.7" /> Configurações
+      </button>
+    </nav>
   }
 
-  <!-- ---------- KPIs ---------- -->
-  <section class="kpis">
-    <div class="kpi">
-      <div class="kpi-topo"><span class="label">Potência agora</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
-      <strong>{{ u.potenciaAtualKw | number: '1.1-1' }} kW</strong>
-      <small>{{ resumo()!.usoPct | number: '1.0-0' }}% da potência instalada</small>
-    </div>
-    <div class="kpi">
-      <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
-      <strong>{{ u.geracaoHojeKwh | number: '1.1-1' }} kWh</strong>
-      <small>{{ resumo()!.produtividade | number: '1.2-2' }} kWh/kWp</small>
-    </div>
-    <div class="kpi">
-      <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
-      <strong>{{ u.geracaoMesKwh | number: '1.0-0' }} kWh</strong>
-      <small>{{ resumo()!.desempenhoMes | number: '1.0-0' }}% do esperado</small>
-    </div>
-    <div class="kpi">
-      <div class="kpi-topo"><span class="label">Última leitura</span><lucide-icon [img]="icones.Clock" [size]="16" [strokeWidth]="1.7" /></div>
-      <strong>{{ ultimaLeitura(u.ultimaLeitura) }}</strong>
-      <small>Pico hoje: {{ resumo()!.picoKw | number: '1.1-1' }} kW</small>
-    </div>
-  </section>
-
-  <!-- ---------- Curva do dia ---------- -->
-  <section class="card">
-    <div class="card-topo">
-      <div>
-        <h3>Potência ao longo do dia</h3>
-        <span class="sub">Hoje, leituras a cada 5 minutos</span>
+  @if (aba() === 'configuracoes') {
+    <app-usina-config [usina]="u" (atualizada)="aoAtualizar($event)" (importado)="carregar()" />
+  } @else {
+    @if (u.status !== 'online') {
+      <div class="alerta" [class.erro]="u.status === 'offline'">
+        @if (u.status === 'offline') {
+          Sem comunicação · última leitura: {{ dataHora(u.ultima_leitura) }}.
+        } @else {
+          Há inversores com falha ou geração abaixo do esperado.
+        }
       </div>
-    </div>
-    @if (curva().length) {
-      <div class="grafico" echarts [options]="opcoesCurva()"></div>
-    } @else {
-      <div class="vazio">Ainda não há leituras hoje.</div>
     }
-  </section>
 
-  <!-- ---------- Histórico 12 meses ---------- -->
-  <section class="card">
-    <div class="card-topo">
-      <div>
-        <h3>Geração mensal</h3>
-        <span class="sub">Últimos 12 meses · gerado × esperado</span>
+    <!-- ---------- KPIs ---------- -->
+    <section class="kpis">
+      <div class="kpi">
+        <div class="kpi-topo"><span class="label">Potência agora</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
+        <strong>{{ u.potencia_atual_kw | number: '1.1-1' }} kW</strong>
+        <small>{{ resumo()!.usoPct | number: '1.0-0' }}% da potência instalada</small>
       </div>
-      <div class="chips">
-        <button class="chip" [class.ativo]="!historicoComoTabela()" (click)="historicoComoTabela.set(false)">Gráfico</button>
-        <button class="chip" [class.ativo]="historicoComoTabela()" (click)="historicoComoTabela.set(true)">Tabela</button>
+      <div class="kpi">
+        <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
+        <strong>{{ u.geracao_hoje_kwh | number: '1.1-1' }} kWh</strong>
+        <small>{{ resumo()!.produtividade | number: '1.2-2' }} kWh/kWp</small>
       </div>
-    </div>
+      <div class="kpi">
+        <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
+        <strong>{{ u.geracao_mes_kwh | number: '1.0-0' }} kWh</strong>
+        <small>
+          @if (resumo()!.desempenhoMes !== null) { {{ resumo()!.desempenhoMes | number: '1.0-0' }}% do esperado }
+          @else { sem geração esperada cadastrada }
+        </small>
+      </div>
+      <div class="kpi">
+        <div class="kpi-topo"><span class="label">Última leitura</span><lucide-icon [img]="icones.Clock" [size]="16" [strokeWidth]="1.7" /></div>
+        <strong>{{ dataHora(u.ultima_leitura) }}</strong>
+        <small>Pico do dia: {{ resumo()!.picoKw | number: '1.1-1' }} kW</small>
+      </div>
+    </section>
 
-    @if (!historicoComoTabela()) {
-      <div class="grafico" echarts [options]="opcoesHistorico()"></div>
-    } @else {
+    <!-- ---------- Curva do dia ---------- -->
+    <section class="card">
+      <div class="card-topo">
+        <div>
+          <h3>Potência ao longo do dia</h3>
+          <span class="sub">Leituras a cada 5 minutos · fuso {{ u.fuso_horario }}</span>
+        </div>
+        <input class="input data" type="date" [max]="hoje" [value]="dataCurva()"
+               (change)="mudarDia($any($event.target).value)" aria-label="Dia da curva">
+      </div>
+      @if (curva()?.pontos?.length) {
+        <div class="grafico" echarts [options]="opcoesCurva()"></div>
+      } @else {
+        <div class="vazio">Sem leituras neste dia.</div>
+      }
+    </section>
+
+    <!-- ---------- Histórico 12 meses ---------- -->
+    <section class="card">
+      <div class="card-topo">
+        <div>
+          <h3>Geração mensal</h3>
+          <span class="sub">Últimos 12 meses{{ temEsperado() ? ' · gerado × esperado' : '' }}</span>
+        </div>
+        <div class="chips">
+          <button class="chip" [class.ativo]="!historicoComoTabela()" (click)="historicoComoTabela.set(false)">Gráfico</button>
+          <button class="chip" [class.ativo]="historicoComoTabela()" (click)="historicoComoTabela.set(true)">Tabela</button>
+        </div>
+      </div>
+
+      @if (!historicoComoTabela()) {
+        <div class="grafico" echarts [options]="opcoesHistorico()"></div>
+      } @else {
+        <div class="tabela-wrap">
+          <table class="tabela">
+            <thead>
+              <tr><th>Mês</th><th class="dir">Gerado</th><th class="dir">Esperado</th><th class="dir">Desempenho</th></tr>
+            </thead>
+            <tbody>
+              @for (m of historico(); track m.mes) {
+                @let pct = desempenhoMes(m);
+                <tr>
+                  <td>{{ m.rotulo }} @if (m.parcial) { <span class="tag neutral">em andamento</span> }</td>
+                  <td class="dir">{{ m.gerado_kwh | number: '1.0-0' }} kWh</td>
+                  <td class="dir">{{ m.esperado_kwh ? (m.esperado_kwh | number: '1.0-0') + ' kWh' : '—' }}</td>
+                  <td class="dir">{{ pct !== null ? (pct | number: '1.0-0') + '%' : '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    <!-- ---------- Inversores ---------- -->
+    <section class="card sem-padding">
+      <div class="card-topo">
+        <div>
+          <h3>Inversores</h3>
+          <span class="sub">{{ inversores().length }} equipamento(s)</span>
+        </div>
+        <lucide-icon class="icone-sub" [img]="icones.Cpu" [size]="18" [strokeWidth]="1.7" />
+      </div>
       <div class="tabela-wrap">
         <table class="tabela">
           <thead>
-            <tr><th>Mês</th><th class="dir">Gerado</th><th class="dir">Esperado</th><th class="dir">Desempenho</th></tr>
+            <tr>
+              <th>Nº de série (SN)</th><th>Modelo</th>
+              <th class="dir">Nominal</th><th class="dir">Agora</th><th class="dir">Hoje</th><th>Status</th>
+            </tr>
           </thead>
           <tbody>
-            @for (m of historico(); track m.rotulo) {
+            @for (inv of inversores(); track inv.id) {
               <tr>
-                <td>{{ m.rotulo }} @if (m.parcial) { <span class="tag neutral">em andamento</span> }</td>
-                <td class="dir">{{ m.geradoKwh | number: '1.0-0' }} kWh</td>
-                <td class="dir">{{ m.esperadoKwh | number: '1.0-0' }} kWh</td>
-                <td class="dir">{{ desempenhoMes(m.geradoKwh, m.esperadoKwh) | number: '1.0-0' }}%</td>
+                <td class="num forte">{{ inv.numero_serie }}</td>
+                <td>{{ inv.modelo || '—' }}</td>
+                <td class="dir">{{ inv.potencia_nominal_kw | number: '1.1-1' }} kW</td>
+                <td class="dir">{{ inv.potencia_atual_kw | number: '1.1-1' }} kW</td>
+                <td class="dir">{{ inv.geracao_hoje_kwh | number: '1.1-1' }} kWh</td>
+                <td>
+                  <span class="tag" [class]="classeStatus[inv.status]">{{ rotuloStatus[inv.status] }}</span>
+                  <div class="sub">{{ dataHora(inv.ultima_leitura) }}</div>
+                </td>
               </tr>
+            } @empty {
+              <tr><td colspan="6"><div class="vazio">Nenhum inversor cadastrado.</div></td></tr>
             }
           </tbody>
         </table>
       </div>
-    }
-  </section>
-
-  <!-- ---------- Inversores ---------- -->
-  <section class="card sem-padding">
-    <div class="card-topo">
-      <div>
-        <h3>Inversores</h3>
-        <span class="sub">{{ inversores().length }} equipamento(s)</span>
-      </div>
-      <lucide-icon class="icone-sub" [img]="icones.Cpu" [size]="18" [strokeWidth]="1.7" />
-    </div>
-    <div class="tabela-wrap">
-      <table class="tabela">
-        <thead>
-          <tr>
-            <th>Inversor</th><th>Nº de série</th>
-            <th class="dir">Nominal</th><th class="dir">Agora</th><th class="dir">Hoje</th><th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (inv of inversores(); track inv.serial) {
-            <tr>
-              <td><div class="forte">{{ inv.nome }}</div><div class="sub">{{ inv.modelo }}</div></td>
-              <td class="num">{{ inv.serial }}</td>
-              <td class="dir">{{ inv.potenciaNominalKw | number: '1.1-1' }} kW</td>
-              <td class="dir">{{ inv.potenciaAtualKw | number: '1.1-1' }} kW</td>
-              <td class="dir">{{ inv.geracaoHojeKwh | number: '1.1-1' }} kWh</td>
-              <td><span class="tag" [class]="classeStatus[inv.status]">{{ rotuloStatus[inv.status] }}</span></td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
+    </section>
   }
 } @else {
   <div class="vazio" style="margin-top: 24px">
-    Usina não encontrada.<br>
+    Usina não encontrada ou sem acesso.<br>
     <a routerLink="/usinas">Voltar para a lista de usinas →</a>
   </div>
 }

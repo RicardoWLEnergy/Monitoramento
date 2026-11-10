@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
-import { authGuard, visitanteGuard } from './core/auth.guard';
-import { ShellComponent } from './layout/shell.component';
+import { authGuard, equipeGuard, visitanteGuard } from './services/auth.guard';
+import { ShellComponent } from './pages/shell/shell.component';
 
 const emConstrucao = (titulo: string) => ({
   loadComponent: () => import('./pages/em-construcao/em-construcao.component').then(m => m.EmConstrucaoComponent),
@@ -35,9 +35,14 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/usina-detalhe/usina-detalhe.component').then(m => m.UsinaDetalheComponent),
         title: 'Usina · W.L Energy',
       },
+      {
+        path: 'clientes',
+        canActivate: [equipeGuard],
+        loadComponent: () => import('./pages/clientes/clientes.component').then(m => m.ClientesComponent),
+        title: 'Clientes · W.L Energy',
+      },
       { path: 'alertas',    ...emConstrucao('Alertas'),    title: 'Alertas · W.L Energy' },
       { path: 'relatorios', ...emConstrucao('Relatórios'), title: 'Relatórios · W.L Energy' },
-      { path: 'clientes',   ...emConstrucao('Clientes'),   title: 'Clientes · W.L Energy' },
       { path: 'usuarios',   ...emConstrucao('Usuários'),   title: 'Usuários · W.L Energy' },
     ],
   },

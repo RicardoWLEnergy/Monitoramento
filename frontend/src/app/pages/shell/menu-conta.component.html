@@ -1,0 +1,27 @@
+@if (aberto()) {
+  <div class="veu" (click)="aberto.set(false)"></div>
+}
+
+<button class="usuario" type="button" (click)="aberto.set(!aberto())"
+        [attr.aria-expanded]="aberto()" aria-haspopup="menu"
+        [attr.title]="recolhida() ? auth.usuario()?.nome : null">
+  <span class="avatar">{{ auth.iniciais() }}</span>
+  <span class="info txt">
+    <strong>{{ auth.usuario()?.nome }}</strong>
+    <small>{{ auth.usuario()?.email }}</small>
+  </span>
+  <lucide-icon class="txt seta" [img]="icones.ChevronsUpDown" [size]="16" [strokeWidth]="1.7" />
+</button>
+
+@if (aberto()) {
+  <div class="menu" role="menu">
+    <div class="menu-topo">
+      <strong>{{ auth.usuario()?.nome }}</strong>
+      <small>{{ auth.usuario()?.email }}</small>
+      @if (auth.perfil(); as perfil) { <small class="perfil">{{ rotuloPerfil[perfil] }}</small> }
+    </div>
+    <button class="menu-item" type="button" role="menuitem" (click)="aoSair()">
+      <lucide-icon [img]="icones.LogOut" [size]="16" [strokeWidth]="1.7" /> Sair
+    </button>
+  </div>
+}

@@ -1,0 +1,150 @@
+<header class="cabecalho">
+  <div>
+    <div class="eyebrow">Gestão</div>
+    <h1>Clientes</h1>
+  </div>
+  <button class="btn primary" type="button" (click)="abrirNovo()">
+    <lucide-icon [img]="icones.Plus" [size]="16" [strokeWidth]="2" /> Novo cliente
+  </button>
+</header>
+
+@if (sucesso(); as s) {
+  <div class="alerta sucesso">
+    {{ s.texto }}
+    @if (s.usina) { <a [routerLink]="['/usinas', s.usina.id]">Ver usina →</a> }
+  </div>
+}
+
+<!-- ---------- Painel: novo cliente / vincular inversor ---------- -->
+@if (modo()) {
+  <form class="card painel-form" (ngSubmit)="enviar()">
+    <div class="painel-topo">
+      <div>
+        <h3>{{ modo() === 'novo' ? 'Novo cliente' : 'Vincular inversor a ' + alvo()?.nome }}</h3>
+        <span class="sub">
+          Informe a SN de um inversor: o sistema busca a usina na plataforma e vincula ao cliente.
+        </span>
+      </div>
+      <button class="btn sm" type="button" (click)="fechar()" aria-label="Fechar">
+        <lucide-icon [img]="icones.X" [size]="14" [strokeWidth]="2" />
+      </button>
+    </div>
+
+    @if (erro()) { <div class="alerta erro">{{ erro() }}</div> }
+
+    @if (modo() === 'novo') {
+      <fieldset>
+        <legend class="label">Dados do cliente</legend>
+        <div class="campos">
+          <label class="campo largo"><span class="label">Nome *</span>
+            <input class="input" name="nome" [(ngModel)]="form.nome" required></label>
+          <label class="campo"><span class="label">E-mail *</span>
+            <input class="input" type="email" name="email" [(ngModel)]="form.email" required></label>
+          <label class="campo"><span class="label">CPF</span>
+            <input class="input num" name="cpf" [(ngModel)]="form.cpf" placeholder="000.000.000-00"></label>
+          <label class="campo"><span class="label">WhatsApp</span>
+            <input class="input num" name="whatsapp" [(ngModel)]="form.whatsapp" placeholder="(61) 99999-8888"></label>
+          <label class="campo"><span class="label">Senha inicial</span>
+            <input class="input" type="password" name="senha" [(ngModel)]="form.senha" autocomplete="new-password"
+                   placeholder="Mín. 8 caracteres"></label>
+          <label class="campo largo"><span class="label">Endereço</span>
+            <input class="input" name="endereco" [(ngModel)]="form.endereco"
+                   placeholder="Rua, número, bairro, cidade - UF"></label>
+        </div>
+        <p class="dica">Sem senha inicial, o cliente fica cadastrado, mas ainda não consegue entrar no sistema.</p>
+      </fieldset>
+    }
+
+    <fieldset>
+      <legend class="label">Usina</legend>
+      <div class="campos">
+        <label class="campo"><span class="label">Plataforma *</span>
+          <select class="input" name="plataforma" [(ngModel)]="form.plataforma" required>
+            @for (p of plataformas; track p.valor) { <option [value]="p.valor">{{ p.rotulo }}</option> }
+          </select></label>
+        <label class="campo"><span class="label">SN do inversor *</span>
+          <input class="input num" name="sn" [(ngModel)]="form.sn" required placeholder="Ex.: J0VB753048DG212"></label>
+      </div>
+    </fieldset>
+
+    <footer class="acoes-form">
+      <button class="btn" type="button" (click)="fechar()">Cancelar</button>
+      <button class="btn primary" type="submit" [disabled]="enviando()">
+        @if (enviando()) { <span class="spinner"></span> Consultando a plataforma... }
+        @else { {{ modo() === 'novo' ? 'Cadastrar e vincular' : 'Vincular usina' }} }
+      </button>
+    </footer>
+  </form>
+}
+
+<!-- ---------- Lista ---------- -->
+<section class="card lista">
+  <div class="lista-topo">
+    <h3>{{ resultado()?.count ?? 0 }} cliente(s)</h3>
+    <span class="com-icone busca">
+      <lucide-icon [img]="icones.Search" [size]="16" [strokeWidth]="1.7" />
+      <input class="input" type="search" placeholder="Buscar por nome, e-mail, CPF ou WhatsApp"
+             [value]="busca()" (input)="definirBusca($any($event.target).value)">
+    </span>
+  </div>
+
+  <div class="tabela-wrap">
+    <table class="tabela">
+      <thead>
+        <tr><th>Cliente</th><th>CPF</th><th>WhatsApp</th><th>Usinas</th><th>Acesso</th><th class="dir">Ações</th></tr>
+      </thead>
+      <tbody>
+        @for (c of resultado()?.results ?? []; track c.id) {
+          <tr>
+            <td>
+              <div class="forte">{{ c.nome }}</div>
+              <div class="sub">{{ c.email }}</div>
+              @if (c.link_maps) {
+                <a class="sub mapa" [href]="c.link_maps" target="_blank" rel="noopener">
+                  {{ c.endereco || 'Ver no mapa' }} <lucide-icon [img]="icones.ExternalLink" [size]="11" [strokeWidth]="1.7" />
+                </a>
+              }
+            </td>
+            <td class="num">{{ c.cpf_formatado || '—' }}</td>
+            <td class="num">{{ c.whatsapp ? whatsappFormatado(c.whatsapp) : '—' }}</td>
+            <td>
+              @for (u of c.usinas; track u.id) {
+                <a class="usina" [routerLink]="['/usinas', u.id]">{{ u.nome }}</a>
+              } @empty { <span class="sub">Nenhuma</span> }
+            </td>
+            <td><span class="tag" [class.ok]="c.ativo" [class.neutral]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            <td class="dir">
+              <div class="acoes">
+                <button class="btn sm" type="button" (click)="abrirVincular(c)" title="Vincular outro inversor/usina">
+                  <lucide-icon [img]="icones.SolarPanel" [size]="14" [strokeWidth]="1.7" /> Vincular
+                </button>
+                <button class="btn sm" type="button" (click)="alternarAtivo(c)">{{ c.ativo ? 'Desativar' : 'Reativar' }}</button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="6">
+            @if (carregando()) {
+              <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
+            } @else if (busca()) {
+              <div class="vazio">Nenhum cliente encontrado.</div>
+            } @else {
+              <div class="vazio">Nenhum cliente cadastrado.<br>
+                <a href="" (click)="$event.preventDefault(); abrirNovo()">Cadastrar o primeiro cliente →</a></div>
+            }
+          </td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="paginacao">
+    <span class="label">Página {{ pagina() }} de {{ totalPaginas() }}</span>
+    <div class="paginas">
+      <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1">
+        <lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> Anterior</button>
+      <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()">
+        Próxima <lucide-icon [img]="icones.ChevronRight" [size]="14" [strokeWidth]="2" /></button>
+    </div>
+  </footer>
+</section>

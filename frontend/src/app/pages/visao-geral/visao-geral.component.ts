@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
@@ -6,13 +6,11 @@ import {
   Activity, CalendarDays, Gauge, LucideAngularModule, TriangleAlert, WifiOff, Zap,
 } from 'lucide-angular';
 
-import { TemaService } from '../../core/tema.service';
-import { UsinasService } from '../../core/usinas.service';
-import { Usina } from '../../core/usinas.mock';
-import { coresDoTema, echarts } from '../../shared/graficos/tema-grafico';
-import { opcoesCurvaPotencia, opcoesGeracaoMensal } from '../../shared/graficos/opcoes-graficos';
+import { AuthService, mensagemDeErro } from '../../services/auth.service';
+import { Dashboard, DashboardService } from '../../services/dashboard.service';
+import { GraficosService, echarts } from '../../services/graficos.service';
 
-/** Visão geral: dashboard da carteira — o que importa saber de relance. */
+/** Visão geral: dashboard das usinas visíveis ao usuário — o que importa saber de relance. */
 @Component({
   selector: 'app-visao-geral',
   imports: [DecimalPipe, RouterLink, NgxEchartsDirective, LucideAngularModule],
@@ -21,48 +19,37 @@ import { opcoesCurvaPotencia, opcoesGeracaoMensal } from '../../shared/graficos/
   styleUrl: './visao-geral.component.css',
 })
 export class VisaoGeralComponent {
-  private readonly servico = inject(UsinasService);
-  private readonly tema = inject(TemaService);
+  private readonly api = inject(DashboardService);
+  private readonly graficos = inject(GraficosService);
+  readonly auth = inject(AuthService);
 
   readonly icones = { Activity, CalendarDays, Gauge, TriangleAlert, WifiOff, Zap };
-
   readonly hoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  readonly kpis = computed(() => {
-    const u = this.servico.usinas();
-    const soma = (f: (x: Usina) => number) => u.reduce((t, x) => t + f(x), 0);
-    return {
-      geracaoHojeKwh: soma(x => x.geracaoHojeKwh),
-      geracaoMesMwh: soma(x => x.geracaoMesKwh) / 1000,
-      desempenhoMes: (soma(x => x.geracaoMesKwh) / soma(x => x.esperadoMesKwh)) * 100,
-      potenciaAtualKw: soma(x => x.potenciaAtualKw),
-      potenciaInstaladaKwp: soma(x => x.potenciaKwp),
-      total: u.length,
-      online: u.filter(x => x.status === 'online').length,
-      alerta: u.filter(x => x.status === 'alerta').length,
-      offline: u.filter(x => x.status === 'offline').length,
-    };
-  });
+  readonly dados = signal<Dashboard | null>(null);
+  readonly carregando = signal(true);
+  readonly erro = signal<string | null>(null);
 
-  /** Usinas offline primeiro, depois em alerta. */
-  readonly atencao = computed(() =>
-    this.servico.usinas()
-      .filter(u => u.status !== 'online')
-      .sort((a, b) => (a.status === 'offline' ? -1 : 1) - (b.status === 'offline' ? -1 : 1)));
+  readonly kpis = computed(() => this.dados()?.kpis);
+  readonly temEsperado = computed(() => (this.dados()?.geracao_mensal ?? []).some(m => m.esperado_kwh > 0));
+  readonly opcoesCurva = computed(() => this.graficos.curvaPotencia(this.dados()?.curva_hoje ?? []));
+  readonly opcoesMensal = computed(() => this.graficos.geracaoMensal(this.dados()?.geracao_mensal ?? [], 'MWh'));
 
-  /** As 5 usinas mais distantes do esperado no mês. */
-  readonly menorDesempenho = computed(() =>
-    this.servico.usinas()
-      .map(u => ({ usina: u, pct: (u.geracaoMesKwh / u.esperadoMesKwh) * 100 }))
-      .sort((a, b) => a.pct - b.pct)
-      .slice(0, 5));
+  constructor() {
+    this.carregar();
+  }
 
-  private readonly cores = computed(() => { this.tema.tema(); return coresDoTema(); });
+  carregar(): void {
+    this.carregando.set(true);
+    this.erro.set(null);
+    this.api.carregar().subscribe({
+      next: d => { this.dados.set(d); this.carregando.set(false); },
+      error: e => { this.erro.set(mensagemDeErro(e, 'Não foi possível carregar o painel.')); this.carregando.set(false); },
+    });
+  }
 
-  readonly opcoesCurva = computed(() => opcoesCurvaPotencia(this.servico.curvaCarteira(), this.cores()));
-  readonly opcoesMensal = computed(() => opcoesGeracaoMensal(this.servico.historicoCarteira(), this.cores(), 'MWh'));
-
-  ultimaLeitura(iso: string): string {
+  ultimaLeitura(iso: string | null): string {
+    if (!iso) return 'sem leituras';
     const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
     if (min < 60) return `há ${min} min`;
     if (min < 1440) return `há ${Math.floor(min / 60)} h`;

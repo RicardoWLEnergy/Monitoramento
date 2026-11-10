@@ -2,8 +2,8 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ArrowRight, Lock, LucideAngularModule, Mail } from 'lucide-angular';
-import { AuthService } from '../../core/auth.service';
-import { LogoComponent } from '../../shared/logo.component';
+import { AuthService } from '../../services/auth.service';
+import { LogoComponent } from '../shell/logo.component';
 
 /** Login — sempre escuro, sem sidebar, card centralizado. */
 @Component({

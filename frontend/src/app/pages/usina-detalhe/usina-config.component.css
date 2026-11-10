@@ -1,20 +1,48 @@
 .grade { display: grid; gap: 16px; }
 .card { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
 h3 { font-size: 16px; font-weight: 700; }
-.sub { color: var(--muted); font-size: 12px; }
+.sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.somente { color: var(--warn-txt); margin-top: 8px; }
 
-.campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.campo { display: grid; gap: 6px; }
+/* Dados somente leitura */
+.dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; margin: 0; }
+.dados dd { margin: 4px 0 0; font-weight: 500; }
 .largo { grid-column: 1 / -1; }
-.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.link-ext { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 13px; }
 
-.acoes { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
-.ok-msg { color: var(--ok); font-size: 13px; font-weight: 500; margin-right: auto; }
+/* Formulários */
+.campos-col { display: grid; gap: 14px; align-content: start; }
+.campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.meses { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.campo { display: grid; gap: 6px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.rodape-secao { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.rodape-secao .sub { margin-right: auto; }
+
+/* Clientes */
+.cliente {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.cliente span { display: grid; }
+.cliente small { color: var(--muted); font-size: 12px; }
+.vazio.pequeno { padding: 16px; }
+.sub-link { font-size: 13px; font-weight: 500; }
+
+.ok-msg { color: var(--ok); font-size: 13px; font-weight: 500; }
+.erro-msg { color: var(--danger-txt); font-size: 13px; font-weight: 500; }
+/* Apagar (alerta com borda esquerda vermelha, como no guia da marca) */
+.card.perigo { border-left: 3px solid var(--wl-danger); }
+.texto { margin: 0; font-size: 13px; color: var(--muted); }
+.btn.perigo { color: var(--danger-txt); border-color: var(--danger-txt); }
+.btn.perigo:hover { background: var(--danger-bg); color: var(--danger-txt); }
 .btn.primary .spinner { border-color: rgba(0, 0, 0, 0.25); border-top-color: var(--wl-black); width: 14px; height: 14px; }
 
 @media (max-width: 900px) {
   .card { grid-template-columns: 1fr; gap: 16px; }
+  .meses { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-  .campos { grid-template-columns: 1fr; }
+  .campos, .dados { grid-template-columns: 1fr; }
+  .meses { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

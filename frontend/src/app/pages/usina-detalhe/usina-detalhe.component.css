@@ -38,3 +38,7 @@
   .cabecalho { flex-direction: column; }
   .grafico { height: 240px; }
 }
+
+.mapa { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.mapa:hover { color: var(--accent); }
+.data { width: auto; padding: 6px 10px; font-size: 13px; }
