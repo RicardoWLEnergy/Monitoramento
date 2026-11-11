@@ -31,9 +31,9 @@ h3 { font-size: 16px; font-weight: 700; }
 
 .ok-msg { color: var(--ok); font-size: 13px; font-weight: 500; }
 .erro-msg { color: var(--danger-txt); font-size: 13px; font-weight: 500; }
-/* Apagar (alerta com borda esquerda vermelha, como no guia da marca) */
-.card.perigo { border-left: 3px solid var(--wl-danger); }
-.texto { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* Apagar usina: botão discreto (a confirmação pede o nome da usina) */
+.apagar { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 .btn.perigo { color: var(--danger-txt); border-color: var(--danger-txt); }
 .btn.perigo:hover { background: var(--danger-bg); color: var(--danger-txt); }
 .btn.primary .spinner { border-color: rgba(0, 0, 0, 0.25); border-top-color: var(--wl-black); width: 14px; height: 14px; }

@@ -1,59 +1,55 @@
 <div class="grade">
-  <!-- ---------- Dados da usina (somente leitura) ---------- -->
+  <!-- ---------- Dados da usina (Admin e Colaborador editam) ---------- -->
   <section class="card">
     <div>
       <h3>Dados da usina</h3>
-      <span class="sub">Vêm da plataforma {{ usina().plataforma_nome }}. Para corrigir, altere no portal do fabricante.</span>
+      <span class="sub">Nome, potência e localização exibidos no sistema.</span>
     </div>
-    <dl class="dados">
-      <div><dt class="label">Nome</dt><dd>{{ usina().nome }}</dd></div>
-      <div><dt class="label">Fabricante</dt><dd>{{ usina().fabricante_nome }}</dd></div>
-      <div><dt class="label">Plataforma</dt><dd>{{ usina().plataforma_nome }}</dd></div>
-      <div><dt class="label">ID na plataforma</dt><dd class="num">{{ usina().id_externo }}</dd></div>
-      <div><dt class="label">Potência instalada</dt><dd>{{ usina().potencia_kwp | number: '1.2-2' }} kWp</dd></div>
-      <div><dt class="label">Fuso horário</dt><dd>{{ usina().fuso_horario }}</dd></div>
-      <div class="largo">
-        <dt class="label">Endereço</dt>
-        <dd>
-          {{ usina().endereco || '—' }}{{ usina().cidade ? ', ' + usina().cidade : '' }}
-          @if (usina().link_maps) {
-            <a class="link-ext" [href]="usina().link_maps" target="_blank" rel="noopener">
-              Abrir no Google Maps <lucide-icon [img]="icones.ExternalLink" [size]="12" [strokeWidth]="1.7" />
-            </a>
-          }
-        </dd>
+    <div class="campos-col">
+      <dl class="dados">
+        <div><dt class="label">Plataforma</dt><dd>{{ usina().plataforma_nome }}</dd></div>
+      </dl>
+      <div class="campos">
+        <label class="campo largo"><span class="label">Nome</span>
+          <input class="input" name="d-nome" [(ngModel)]="dados.nome" required></label>
+        <label class="campo"><span class="label">Potência instalada (kWp)</span>
+          <input class="input num" type="number" min="0" step="0.01" name="d-kwp" [(ngModel)]="dados.potencia_kwp"></label>
+        <label class="campo"><span class="label">Fuso horário</span>
+          <select class="input" name="d-fuso" [(ngModel)]="dados.fuso_horario">
+            @for (f of fusos; track f) { <option [value]="f">{{ f }}</option> }
+          </select></label>
+        <label class="campo largo"><span class="label">Endereço</span>
+          <input class="input" name="d-endereco" [(ngModel)]="dados.endereco"></label>
+        <label class="campo"><span class="label">Cidade</span>
+          <input class="input" name="d-cidade" [(ngModel)]="dados.cidade"></label>
+        <label class="campo"><span class="label">UF</span>
+          <input class="input" name="d-uf" maxlength="2" [(ngModel)]="dados.uf"></label>
+        <label class="campo"><span class="label">Latitude</span>
+          <input class="input num" type="number" step="0.000001" name="d-lat" [(ngModel)]="dados.latitude" placeholder="-15.794229"></label>
+        <label class="campo"><span class="label">Longitude</span>
+          <input class="input num" type="number" step="0.000001" name="d-lon" [(ngModel)]="dados.longitude" placeholder="-47.882166"></label>
       </div>
-    </dl>
+      <div class="rodape-secao">
+        @if (usina().link_maps) {
+          <a class="link-ext sub" [href]="usina().link_maps" target="_blank" rel="noopener">
+            Abrir no Google Maps <lucide-icon [img]="icones.ExternalLink" [size]="12" [strokeWidth]="1.7" />
+          </a>
+        }
+        @if (aviso()['dados']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
+        <button class="btn primary" type="button" (click)="salvarDados()" [disabled]="salvando() === 'dados'">
+          {{ salvando() === 'dados' ? 'Salvando...' : 'Salvar dados' }}
+        </button>
+      </div>
+    </div>
   </section>
 
   <!-- ---------- Histórico de geração ---------- -->
   <section class="card">
     <div>
       <h3>Histórico de geração</h3>
-      <span class="sub">Busca na plataforma a geração de dias anteriores e grava no sistema. Pode repetir: nada é duplicado.</span>
+      <span class="sub">Traz da plataforma a geração de dias anteriores.</span>
     </div>
     <div class="campos-col">
-      @if (cobertura(); as c) {
-        <dl class="dados">
-          <div>
-            <dt class="label">Energia diária no sistema</dt>
-            <dd>
-              @if (c.energia_diaria.dias) {
-                {{ c.energia_diaria.dias }} dia(s) · {{ dataBR(c.energia_diaria.inicio) }} a {{ dataBR(c.energia_diaria.fim) }}
-              } @else { Nenhum dia importado }
-            </dd>
-          </div>
-          <div>
-            <dt class="label">Curva de 5 min no sistema</dt>
-            <dd>
-              @if (c.curvas.dias) {
-                {{ c.curvas.dias }} dia(s) · {{ dataBR(c.curvas.inicio) }} a {{ dataBR(c.curvas.fim) }}
-              } @else { Nenhum dia importado }
-            </dd>
-          </div>
-        </dl>
-      }
-
       <div class="chips">
         @for (a of atalhos; track a.dias) {
           <button class="chip" type="button" (click)="usarAtalho(a.dias)">Últimos {{ a.rotulo }}</button>
@@ -69,9 +65,6 @@
           Importar também a curva de 5 minutos (mais lento)
         </label>
       </div>
-      @if (cobertura(); as c) {
-        <span class="sub">O sistema guarda curvas de 5 min a partir de {{ dataBR(c.limite_curvas) }}; a energia diária, sem limite.</span>
-      }
 
       <div class="rodape-secao">
         <span class="sub">Tempo estimado: <b>{{ estimativaTexto }}</b> · não feche a página durante a importação.</span>
@@ -166,26 +159,14 @@
     </div>
   </section>
 
-  <!-- ---------- Apagar usina (só Admin) ---------- -->
+  <!-- ---------- Apagar usina (só Admin; pede o nome para confirmar) ---------- -->
   @if (auth.eAdmin()) {
-    <section class="card perigo">
-      <div>
-        <h3>Apagar usina</h3>
-        <span class="sub">Só administradores.</span>
-      </div>
-      <div class="campos-col">
-        <p class="texto">
-          A usina some do sistema e os clientes vinculados perdem o acesso. O histórico de geração
-          <b>fica guardado</b>: se a SN de um inversor dela for cadastrada de novo, ela volta a ficar ativa com todos os dados.
-        </p>
-        <div class="rodape-secao">
-          @if (aviso()['apagar']; as a) { <span class="erro-msg">{{ a.texto }}</span> }
-          <button class="btn perigo" type="button" (click)="apagarUsina()" [disabled]="salvando() === 'apagar'">
-            <lucide-icon [img]="icones.Trash2" [size]="16" [strokeWidth]="1.8" />
-            {{ salvando() === 'apagar' ? 'Apagando...' : 'Apagar usina' }}
-          </button>
-        </div>
-      </div>
-    </section>
+    <div class="apagar">
+      @if (aviso()['apagar']; as a) { <span class="erro-msg">{{ a.texto }}</span> }
+      <button class="btn sm perigo" type="button" (click)="apagarUsina()" [disabled]="salvando() === 'apagar'">
+        <lucide-icon [img]="icones.Trash2" [size]="14" [strokeWidth]="1.8" />
+        {{ salvando() === 'apagar' ? 'Apagando...' : 'Apagar usina' }}
+      </button>
+    </div>
   }
 </div>

@@ -1,13 +1,18 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { I18nPluralPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { catchError, debounceTime, firstValueFrom, merge, of, switchMap, tap } from 'rxjs';
-import { ChevronLeft, ChevronRight, ExternalLink, LucideAngularModule, Plus, Search, SolarPanel, X } from 'lucide-angular';
+import { catchError, debounceTime, firstValueFrom, of, switchMap, tap } from 'rxjs';
+import {
+  ChevronLeft, ChevronRight, ExternalLink, LucideAngularModule, Pencil, Plus, Search, SolarPanel, X,
+} from 'lucide-angular';
 
 import { mensagemDeErro } from '../../services/auth.service';
+import { plural } from '../../services/formato';
 import { PLATAFORMAS, Pagina, Plataforma } from '../../services/usinas.service';
 import { NovoUsuario, ResultadoVinculo, UsuarioCadastro, UsuariosService } from '../../services/usuarios.service';
+import { UsuarioFormComponent } from '../usuarios/usuario-form.component';
 
 const POR_PAGINA = 20;
 
@@ -27,14 +32,14 @@ const formularioVazio = (): Formulario => ({
  */
 @Component({
   selector: 'app-clientes',
-  imports: [FormsModule, RouterLink, LucideAngularModule],
+  imports: [FormsModule, I18nPluralPipe, RouterLink, LucideAngularModule, UsuarioFormComponent],
   templateUrl: './clientes.component.html',
   styleUrl: './clientes.component.css',
 })
 export class ClientesComponent {
   private readonly api = inject(UsuariosService);
 
-  readonly icones = { ChevronLeft, ChevronRight, ExternalLink, Plus, Search, SolarPanel, X };
+  readonly icones = { ChevronLeft, ChevronRight, ExternalLink, Pencil, Plus, Search, SolarPanel, X };
   readonly plataformas = PLATAFORMAS;
 
   // ---------- Lista ----------
@@ -56,8 +61,8 @@ export class ClientesComponent {
   );
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil((this.resultado()?.count ?? 0) / POR_PAGINA)));
 
-  // ---------- Painel: novo cliente / vincular inversor ----------
-  readonly modo = signal<'novo' | 'vincular' | null>(null);
+  // ---------- Painel: novo cliente / vincular inversor / editar ----------
+  readonly modo = signal<'novo' | 'vincular' | 'editar' | null>(null);
   readonly alvo = signal<UsuarioCadastro | null>(null);
   form: Formulario = formularioVazio();
   readonly enviando = signal(false);
@@ -81,6 +86,18 @@ export class ClientesComponent {
     this.erro.set(null);
     this.sucesso.set(null);
     this.modo.set('vincular');
+  }
+
+  abrirEdicao(cliente: UsuarioCadastro): void {
+    this.alvo.set(cliente);
+    this.sucesso.set(null);
+    this.modo.set('editar');
+  }
+
+  aoEditar(cliente: UsuarioCadastro): void {
+    this.sucesso.set({ texto: `${cliente.nome}: dados salvos.` });
+    this.modo.set(null);
+    this.recarregar.update(n => n + 1);
   }
 
   fechar(): void { this.modo.set(null); }
@@ -111,7 +128,7 @@ export class ClientesComponent {
       const r: ResultadoVinculo = await firstValueFrom(
         this.api.vincularInversor(cliente!.id, this.form.plataforma, this.form.sn.trim()));
       this.sucesso.set({
-        texto: `${cliente!.nome}: ${r.detail} (${r.inversores.length} inversor(es))`,
+        texto: `${cliente!.nome}: ${r.detail} (${plural(r.inversores.length, 'inversor', 'inversores')})`,
         usina: r.usina,
       });
       this.modo.set(null);
@@ -122,15 +139,6 @@ export class ClientesComponent {
       this.enviando.set(false);
       this.recarregar.update(n => n + 1);
     }
-  }
-
-  alternarAtivo(c: UsuarioCadastro): void {
-    const acao = c.ativo ? 'Desativar' : 'Reativar';
-    if (!confirm(`${acao} o acesso de ${c.nome}?`)) return;
-    this.api.atualizar(c.id, { ativo: !c.ativo }).subscribe({
-      next: () => this.recarregar.update(n => n + 1),
-      error: e => alert(mensagemDeErro(e)),
-    });
   }
 
   whatsappFormatado(numero: string | null): string {

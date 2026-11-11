@@ -2,15 +2,15 @@ import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs';
 import {
-  Bell, Building2, FileText, LayoutDashboard, LucideAngularModule, LucideIconData,
-  Menu, Moon, PanelLeftClose, PanelLeftOpen, SolarPanel, Sun, Users,
+  Building2, LayoutDashboard, LucideAngularModule, LucideIconData,
+  Menu, Moon, PanelLeftClose, SolarPanel, Sun, Users,
 } from 'lucide-angular';
 import { AuthService } from '../../services/auth.service';
 import { TemaService } from '../../services/tema.service';
 import { LogoComponent } from './logo.component';
 import { MenuContaComponent } from './menu-conta.component';
 
-interface ItemMenu { rota: string; rotulo: string; icone: LucideIconData; soAdmin?: boolean; }
+interface ItemMenu { rota: string; rotulo: string; icone: LucideIconData; soAdmin?: boolean; soEquipe?: boolean; }
 
 const CHAVE_RECOLHIDA = 'wl-sidebar-recolhida';
 
@@ -32,13 +32,11 @@ export class ShellComponent {
   /** Menu lateral aberto (só no mobile). */
   readonly menuAberto = signal(false);
 
-  readonly icones = { Moon, Sun, Menu, PanelLeftClose, PanelLeftOpen };
+  readonly icones = { Moon, Sun, Menu, PanelLeftClose };
 
   readonly monitoramento: ItemMenu[] = [
-    { rota: '/visao-geral', rotulo: 'Visão geral', icone: LayoutDashboard },
+    { rota: '/visao-geral', rotulo: 'Visão geral', icone: LayoutDashboard, soEquipe: true },
     { rota: '/usinas',      rotulo: 'Usinas',      icone: SolarPanel },
-    { rota: '/alertas',     rotulo: 'Alertas',     icone: Bell },
-    { rota: '/relatorios',  rotulo: 'Relatórios',  icone: FileText },
   ];
 
   /** Gestão: Admin e Colaborador veem Clientes; só o Admin vê Usuários. */

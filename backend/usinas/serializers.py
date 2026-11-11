@@ -44,12 +44,37 @@ class UsinaDetalheSerializer(UsinaListaSerializer):
         return dados
 
 
-class UsinaAlertasSerializer(serializers.ModelSerializer):
-    """O que o Admin pode alterar numa usina (o resto vem da plataforma)."""
+CAMPOS_CADASTRAIS = ['nome', 'endereco', 'cidade', 'uf', 'latitude', 'longitude', 'potencia_kwp', 'fuso_horario']
+CAMPOS_ALERTAS = ['alertas_ativos', 'limite_desempenho_pct', 'minutos_sem_comunicacao']
+
+
+class UsinaEdicaoSerializer(serializers.ModelSerializer):
+    """
+    O que a equipe pode alterar numa usina (PATCH):
+    - dados cadastrais: Admin e Colaborador (vêm da plataforma só no primeiro cadastro)
+    - alertas: só Admin (a view confere)
+    Plataforma, ID externo, fabricante, inversores e status continuam vindo da plataforma.
+    """
 
     class Meta:
         model = Usina
-        fields = ['alertas_ativos', 'limite_desempenho_pct', 'minutos_sem_comunicacao']
+        fields = CAMPOS_CADASTRAIS + CAMPOS_ALERTAS
+
+    def validate_nome(self, valor):
+        if not valor.strip():
+            raise serializers.ValidationError('Informe o nome da usina.')
+        return valor.strip()
+
+    def validate_uf(self, valor):
+        return (valor or '').strip().upper()
+
+    def validate_fuso_horario(self, valor):
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        try:
+            ZoneInfo(valor)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise serializers.ValidationError('Fuso horário inválido (ex.: America/Sao_Paulo).')
+        return valor
 
 
 class InversorSerializer(serializers.ModelSerializer):

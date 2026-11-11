@@ -55,10 +55,10 @@ def _decimal(valor, casas: int = 2) -> Decimal:
 
 
 def status_da_usina(status_inversores: list[str]) -> str:
-    if Status.ALERTA in status_inversores:
-        return Status.ALERTA
-    if Status.ONLINE in status_inversores:
-        return Status.ONLINE
+    """Prioridade: alerta > online > sem sol (noite) > offline."""
+    for status in (Status.ALERTA, Status.ONLINE, Status.NOITE):
+        if status in status_inversores:
+            return status
     return Status.OFFLINE
 
 
@@ -148,13 +148,23 @@ def _cadastrar_foxess(sn: str, cliente: Usuario) -> ResultadoCadastro:
     )
 
 
+# Dados que a equipe pode corrigir no sistema: vêm da plataforma só no PRIMEIRO cadastro
+CAMPOS_CADASTRAIS = {'nome', 'endereco', 'cidade', 'uf', 'latitude', 'longitude', 'potencia_kwp', 'fuso_horario'}
+
+
 def _gravar(plataforma: str, id_usina: str, cliente: Usuario, usina: dict, inversores: dict[str, dict]) -> ResultadoCadastro:
-    """Grava usina + inversores e vincula o cliente, numa transação. Reativa a usina se estava "apagada"."""
+    """
+    Grava usina + inversores e vincula o cliente, numa transação. Reativa a usina se estava "apagada".
+    Usina já existente: atualiza só o técnico (fabricante, status); os dados cadastrais editados
+    pela equipe são mantidos.
+    """
     estava_desativada = Usina.objects.filter(plataforma=plataforma, id_externo=id_usina, ativa=False).exists()
+    tecnicos = {k: v for k, v in usina.items() if k not in CAMPOS_CADASTRAIS}
     with transaction.atomic():
         obj, nova = Usina.objects.update_or_create(
             plataforma=plataforma, id_externo=id_usina,
-            defaults={**usina, 'ativa': True, 'desativada_em': None},
+            defaults={**tecnicos, 'ativa': True, 'desativada_em': None},
+            create_defaults={**usina, 'ativa': True, 'desativada_em': None},
         )
         for numero, dados in inversores.items():
             Inversor.objects.update_or_create(numero_serie=numero, defaults={'usina': obj, **dados})

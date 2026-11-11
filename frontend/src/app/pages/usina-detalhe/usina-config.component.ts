@@ -6,11 +6,17 @@ import { Observable } from 'rxjs';
 import { Download, ExternalLink, LucideAngularModule, Trash2, X } from 'lucide-angular';
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
-import { CoberturaHistorico, ConfigAlertas, UsinaDetalhe, UsinasService } from '../../services/usinas.service';
+import { plural } from '../../services/formato';
+import { CoberturaHistorico, ConfigAlertas, DadosUsina, UsinaDetalhe, UsinasService } from '../../services/usinas.service';
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-type Secao = 'alertas' | 'esperado' | 'clientes' | 'historico' | 'apagar';
+type Secao = 'dados' | 'alertas' | 'esperado' | 'clientes' | 'historico' | 'apagar';
+
+/** Fusos do Brasil (IANA). */
+const FUSOS = ['America/Sao_Paulo', 'America/Bahia', 'America/Fortaleza', 'America/Recife', 'America/Belem',
+  'America/Manaus', 'America/Cuiaba', 'America/Campo_Grande', 'America/Porto_Velho', 'America/Boa_Vista',
+  'America/Rio_Branco', 'America/Noronha'];
 interface Aviso { tipo: 'ok' | 'erro'; texto: string; }
 
 const isoLocal = (d: Date) => d.toLocaleDateString('sv-SE');   // AAAA-MM-DD no fuso local
@@ -18,7 +24,7 @@ const diasAtras = (n: number) => { const d = new Date(); d.setDate(d.getDate() -
 
 /**
  * Aba "Configurações" (Admin e Colaborador).
- * - Dados da usina: vêm da plataforma (somente leitura)
+ * - Dados da usina: vêm da plataforma no 1º cadastro; Admin e Colaborador corrigem
  * - Histórico de geração: importar dias anteriores da plataforma (Admin e Colaborador)
  * - Clientes vinculados: Admin e Colaborador
  * - Geração esperada e alertas: só o Admin altera
@@ -43,6 +49,8 @@ export class UsinaConfigComponent implements OnChanges {
   readonly icones = { Download, ExternalLink, Trash2, X };
   readonly meses = MESES;
 
+  dados!: DadosUsina;
+  fusos = FUSOS;
   alertas!: ConfigAlertas;
   esperado: (number | null)[] = Array(12).fill(null);
 
@@ -62,6 +70,11 @@ export class UsinaConfigComponent implements OnChanges {
 
   ngOnChanges(): void {
     const u = this.usina();
+    this.dados = {
+      nome: u.nome, endereco: u.endereco, cidade: u.cidade, uf: u.uf,
+      latitude: u.latitude, longitude: u.longitude, potencia_kwp: u.potencia_kwp, fuso_horario: u.fuso_horario,
+    };
+    if (!this.fusos.includes(u.fuso_horario)) this.fusos = [u.fuso_horario, ...FUSOS];
     this.alertas = {
       alertas_ativos: u.alertas_ativos,
       limite_desempenho_pct: u.limite_desempenho_pct,
@@ -104,9 +117,9 @@ export class UsinaConfigComponent implements OnChanges {
       next: r => {
         this.salvando.set(null);
         this.cobertura.set(r.cobertura);
-        let texto = `Importado: ${r.dias_energia} dia(s) de energia`;
-        if (curvas) texto += ` e ${r.dias_curva} dia(s) de curva (${r.leituras} leituras)`;
-        texto += r.falhas.length ? `. ${r.falhas.length} falha(s): ${r.falhas.slice(0, 2).join('; ')}` : '.';
+        let texto = `Importado: ${plural(r.dias_energia, 'dia', 'dias')} de energia`;
+        if (curvas) texto += ` e ${plural(r.dias_curva, 'dia', 'dias')} de curva`;
+        texto += r.falhas.length ? `. ${plural(r.falhas.length, 'falha', 'falhas')}: ${r.falhas.slice(0, 2).join('; ')}` : '.';
         this.aviso.update(a => ({ ...a, historico: { tipo: r.falhas.length ? 'erro' : 'ok', texto } }));
         this.importado.emit();
       },
@@ -117,11 +130,13 @@ export class UsinaConfigComponent implements OnChanges {
     });
   }
 
-  dataBR(iso: string | null): string {
-    return iso ? iso.split('-').reverse().join('/') : '—';
+  // ---------- Demais seções ----------
+  salvarDados(): void {
+    const vazioViraNull = (v: number | null | string) => (v === '' || v === undefined ? null : v) as number | null;
+    const dados = { ...this.dados, latitude: vazioViraNull(this.dados.latitude), longitude: vazioViraNull(this.dados.longitude) };
+    this.executar('dados', this.api.salvarDados(this.usina().id, dados), 'Dados salvos.');
   }
 
-  // ---------- Demais seções ----------
   salvarAlertas(): void {
     this.executar('alertas', this.api.salvarAlertas(this.usina().id, this.alertas), 'Alertas salvos.');
   }

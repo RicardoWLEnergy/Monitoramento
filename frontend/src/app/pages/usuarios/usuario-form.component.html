@@ -1,0 +1,52 @@
+<form class="card painel-form" (ngSubmit)="enviar()">
+  <div class="painel-topo">
+    <div>
+      <h3>{{ titulo() || (editando ? 'Editar ' + usuario()!.nome : 'Novo usuário') }}</h3>
+      @if (editando) { <span class="sub">{{ usuario()!.email }}</span> }
+    </div>
+    <button class="btn sm" type="button" (click)="cancelar.emit()" aria-label="Fechar">
+      <lucide-icon [img]="icones.X" [size]="14" [strokeWidth]="2" />
+    </button>
+  </div>
+
+  @if (erro()) { <div class="alerta erro">{{ erro() }}</div> }
+
+  <div class="campos">
+    <label class="campo largo"><span class="label">Nome *</span>
+      <input class="input" name="nome" [(ngModel)]="form.nome" required></label>
+    <label class="campo"><span class="label">E-mail *</span>
+      <input class="input" type="email" name="email" [(ngModel)]="form.email" required></label>
+    <label class="campo"><span class="label">CPF</span>
+      <input class="input num" name="cpf" [(ngModel)]="form.cpf" placeholder="000.000.000-00"></label>
+    <label class="campo"><span class="label">WhatsApp</span>
+      <input class="input num" name="whatsapp" [(ngModel)]="form.whatsapp" placeholder="(61) 99999-8888"></label>
+    @if (perfis().length > 1) {
+      <label class="campo"><span class="label">Perfil</span>
+        <select class="input" name="perfil" [(ngModel)]="form.perfil" [disabled]="eVoceMesmo">
+          @for (p of perfis(); track p) { <option [value]="p">{{ rotuloPerfil[p] }}</option> }
+        </select></label>
+    }
+    <label class="campo largo"><span class="label">Endereço</span>
+      <input class="input" name="endereco" [(ngModel)]="form.endereco" placeholder="Rua, número, bairro, cidade - UF"></label>
+    <label class="campo"><span class="label">{{ editando ? 'Nova senha' : 'Senha inicial' }}</span>
+      <input class="input" type="password" name="senha" [(ngModel)]="form.senha" autocomplete="new-password"
+             [placeholder]="editando ? 'Em branco = manter a atual' : 'Mín. 8 caracteres'"></label>
+    @if (editando) {
+      <label class="check">
+        <input type="checkbox" name="ativo" [(ngModel)]="form.ativo" [disabled]="eVoceMesmo">
+        Acesso ativo
+        @if (eVoceMesmo) { <span class="sub">(você não pode desativar o seu próprio acesso)</span> }
+      </label>
+    }
+  </div>
+  @if (!editando) {
+    <p class="dica">Sem senha inicial, o usuário fica cadastrado, mas ainda não consegue entrar no sistema.</p>
+  }
+
+  <footer class="acoes-form">
+    <button class="btn" type="button" (click)="cancelar.emit()">Cancelar</button>
+    <button class="btn primary" type="submit" [disabled]="enviando()">
+      @if (enviando()) { <span class="spinner"></span> Salvando... } @else { {{ editando ? 'Salvar alterações' : 'Cadastrar' }} }
+    </button>
+  </footer>
+</form>

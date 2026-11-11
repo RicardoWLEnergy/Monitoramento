@@ -116,11 +116,21 @@ class TempoRealHuaweiTests(ColetaHuaweiBase):
         self.assertEqual(Leitura.objects.get().potencia_kw, 2.1)
         self.assertEqual(float(GeracaoDiaria.objects.get().energia_kwh), 11.9)
 
-    def test_noite_standby_fica_offline(self):
-        self.api.tempo_real_dispositivos.return_value = self.tempo_real(0.0, 40960)   # formato real (noite)
-        coleta_huawei.atualizar_tempo_real(api=self.api)
+    def coletar_as(self, hora: int, potencia, estado, comunicando=1):
+        momento = timezone.localtime().replace(hour=hora, minute=0, second=0, microsecond=0)
+        self.api.tempo_real_dispositivos.return_value = self.tempo_real(potencia, estado, comunicando)
+        with patch('integracoes.coleta_huawei.timezone.now', return_value=momento):
+            coleta_huawei.atualizar_tempo_real(api=self.api)
         self.usina.refresh_from_db()
-        self.assertEqual(self.usina.status, Status.OFFLINE)
+        return self.usina.status
+
+    def test_standby_sem_irradiancia_e_sem_sol_a_qualquer_hora(self):
+        self.assertEqual(self.coletar_as(22, 0.0, 40960), Status.NOITE)   # formato real (noite)
+        self.assertEqual(self.coletar_as(7, 0.0, 40960), Status.NOITE)    # amanhecer nublado
+
+    def test_sem_comunicacao_de_dia_e_offline_e_a_noite_e_sem_sol(self):
+        self.assertEqual(self.coletar_as(11, 0.0, 45056, comunicando=0), Status.OFFLINE)
+        self.assertEqual(self.coletar_as(23, 0.0, 45056, comunicando=0), Status.NOITE)
 
     def test_falha_vira_alerta(self):
         self.api.tempo_real_dispositivos.return_value = self.tempo_real(0.0, 768)

@@ -73,9 +73,29 @@ class UsinasApiTests(UsinasApiBase):
         r = self.client.patch(f'/api/usinas/{self.minha.pk}/', {'limite_desempenho_pct': 70})
         self.assertEqual(r.status_code, 403)
         self.entrar(self.admin)
-        r = self.client.patch(f'/api/usinas/{self.minha.pk}/', {'limite_desempenho_pct': 70, 'nome': 'ignorado'})
+        r = self.client.patch(f'/api/usinas/{self.minha.pk}/', {'limite_desempenho_pct': 70, 'plataforma': 'huawei'})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual((r.data['limite_desempenho_pct'], r.data['nome']), (70, 'Usina do Cliente'))
+        self.assertEqual((r.data['limite_desempenho_pct'], r.data['plataforma']), (70, 'foxess'))   # plataforma não muda
+
+    def test_equipe_edita_dados_cadastrais(self):
+        dados = {'nome': 'UFV Corrigida', 'cidade': 'Brasília', 'uf': 'df', 'potencia_kwp': 119.6,
+                 'latitude': -15.8, 'longitude': -47.9, 'endereco': 'SIA Trecho 1'}
+        self.entrar(self.colab)
+        r = self.client.patch(f'/api/usinas/{self.minha.pk}/', dados, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual((r.data['nome'], r.data['uf'], float(r.data['potencia_kwp'])), ('UFV Corrigida', 'DF', 119.6))
+        self.assertIn('-15.8', r.data['link_maps'])
+
+    def test_cliente_nao_edita_usina(self):
+        self.entrar(self.cliente)
+        r = self.client.patch(f'/api/usinas/{self.minha.pk}/', {'nome': 'Minha'}, format='json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_validacoes_da_edicao(self):
+        self.entrar(self.admin)
+        url = f'/api/usinas/{self.minha.pk}/'
+        self.assertEqual(self.client.patch(url, {'nome': '  '}, format='json').status_code, 400)
+        self.assertEqual(self.client.patch(url, {'fuso_horario': 'Lua/Base'}, format='json').status_code, 400)
 
     def test_vincular_clientes(self):
         self.entrar(self.colab)

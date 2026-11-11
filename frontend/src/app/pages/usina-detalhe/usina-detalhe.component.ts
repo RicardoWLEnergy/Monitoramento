@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, I18nPluralPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { forkJoin, map } from 'rxjs';
@@ -22,7 +22,7 @@ const hojeIso = () => new Date().toLocaleDateString('sv-SE');   // AAAA-MM-DD no
 /** Detalhe da usina: aba Geração (todos) e aba Configurações (Admin/Colaborador). */
 @Component({
   selector: 'app-usina-detalhe',
-  imports: [DecimalPipe, RouterLink, NgxEchartsDirective, LucideAngularModule, UsinaConfigComponent],
+  imports: [DecimalPipe, I18nPluralPipe, RouterLink, NgxEchartsDirective, LucideAngularModule, UsinaConfigComponent],
   providers: [provideEchartsCore({ echarts })],
   templateUrl: './usina-detalhe.component.html',
   styleUrl: './usina-detalhe.component.css',

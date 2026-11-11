@@ -1,0 +1,60 @@
+<header class="cabecalho">
+  <div>
+    <div class="eyebrow">Gestão</div>
+    <h1>Usuários</h1>
+  </div>
+  <button class="btn primary" type="button" (click)="abrirNovo()">
+    <lucide-icon [img]="icones.Plus" [size]="16" [strokeWidth]="2" /> Novo usuário
+  </button>
+</header>
+
+@if (sucesso()) { <div class="alerta sucesso">{{ sucesso() }}</div> }
+
+@if (emEdicao()) {
+  <app-usuario-form [usuario]="usuarioEmEdicao()" [perfis]="perfisEquipe"
+                    [titulo]="emEdicao() === 'novo' ? 'Novo usuário da equipe' : ''"
+                    (salvo)="aoSalvar($event)" (cancelar)="emEdicao.set(null)" />
+}
+
+<section class="card lista">
+  <div class="lista-topo">
+    <div class="chips">
+      <button class="chip" [class.ativo]="!filtroPerfil()" (click)="filtroPerfil.set(null)">Todos</button>
+      <button class="chip" [class.ativo]="filtroPerfil() === 'admin'" (click)="filtroPerfil.set('admin')">Admin</button>
+      <button class="chip" [class.ativo]="filtroPerfil() === 'colaborador'" (click)="filtroPerfil.set('colaborador')">Colaborador</button>
+    </div>
+    <span class="com-icone busca">
+      <lucide-icon [img]="icones.Search" [size]="16" [strokeWidth]="1.7" />
+      <input class="input" type="search" placeholder="Buscar por nome ou e-mail"
+             [value]="busca()" (input)="busca.set($any($event.target).value)">
+    </span>
+  </div>
+
+  <div class="tabela-wrap">
+    <table class="tabela">
+      <thead><tr><th>Usuário</th><th>Perfil</th><th>Último acesso</th><th>Acesso</th><th class="dir">Ações</th></tr></thead>
+      <tbody>
+        @for (u of resultado()?.results ?? []; track u.id) {
+          <tr>
+            <td>
+              <div class="forte">{{ u.nome }} @if (u.id === auth.usuario()?.id) { <span class="sub">(você)</span> }</div>
+              <div class="sub">{{ u.email }}</div>
+            </td>
+            <td><span class="tag" [class.info]="u.perfil === 'admin'" [class.neutral]="u.perfil !== 'admin'">{{ rotuloPerfil[u.perfil] }}</span></td>
+            <td class="sub">{{ ultimoAcesso(u.last_login) }}</td>
+            <td><span class="tag" [class.ok]="u.ativo" [class.neutral]="!u.ativo">{{ u.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            <td class="dir">
+              <button class="btn sm" type="button" (click)="abrirEdicao(u)">
+                <lucide-icon [img]="icones.Pencil" [size]="14" [strokeWidth]="1.7" /> Editar
+              </button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="5">
+            <div class="vazio">@if (carregando()) { <span class="spinner"></span><br>Carregando... } @else { Nenhum usuário encontrado. }</div>
+          </td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>

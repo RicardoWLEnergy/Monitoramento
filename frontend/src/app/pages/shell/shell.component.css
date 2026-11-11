@@ -10,6 +10,8 @@
   border-right: 1px solid var(--sb-line);
   transition: width 200ms var(--ease-out);
 }
+.sb-marca { display: none; padding: 6px; background: none; border: 0; cursor: pointer; opacity: 0.9; }
+.sb-marca:hover { opacity: 1; }
 .sb-topo {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   height: 72px; padding: 0 14px 0 20px; border-bottom: 1px solid var(--sb-line);
@@ -54,6 +56,8 @@
   :host(.recolhida) .txt,
   :host(.recolhida) .sb-logo { display: none; }
   :host(.recolhida) .sb-topo { justify-content: center; padding: 0; }
+  :host(.recolhida) .sb-marca { display: inline-flex; }
+  :host(.recolhida) .sb-recolher { display: none; }
   :host(.recolhida) .sb-label { padding: 0; height: 1px; margin: 12px 16px; background: var(--sb-line); }
   :host(.recolhida) .sb-label:first-child { display: none; }
   :host(.recolhida) .sb-item { justify-content: center; padding: 11px 0; }

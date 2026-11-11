@@ -71,16 +71,25 @@ def _numero(valor) -> float:
         return 0.0
 
 
-def _status_inversor(estado, potencia: float) -> str:
+# Período sem sol (horário local da usina). Sem geração nesse período é normal: status "noite".
+INICIO_NOITE, FIM_NOITE = 18, 6
+
+
+def e_noite(momento: datetime, fuso: str) -> bool:
+    hora = momento.astimezone(ZoneInfo(fuso)).hour
+    return hora >= INICIO_NOITE or hora < FIM_NOITE
+
+
+def _status_inversor(estado, potencia: float, noite: bool = False) -> str:
     try:
         estado = int(estado)
     except (TypeError, ValueError):
         estado = None
     if estado in ESTADOS_FALHA:
-        return Status.ALERTA
+        return Status.ALERTA                 # falha é alerta a qualquer hora
     if estado in ESTADOS_ONLINE or potencia > 0:
         return Status.ONLINE
-    return Status.OFFLINE   # inclui a noite (inversor desligado sem sol)
+    return Status.NOITE if noite else Status.OFFLINE   # inversor desligado sem sol não é problema
 
 
 def _usinas_foxess(usinas=None):
@@ -97,6 +106,7 @@ def atualizar_tempo_real(usinas=None, api: FoxESSCliente | None = None) -> Relat
     rel = Relatorio()
     usinas = list(_usinas_foxess(usinas))
     inversores = {inv.numero_serie: inv for u in usinas for inv in u.inversores.all()}
+    fuso_do_inversor = {inv.numero_serie: u.fuso_horario for u in usinas for inv in u.inversores.all()}
     if not inversores:
         return rel
 
@@ -113,8 +123,10 @@ def atualizar_tempo_real(usinas=None, api: FoxESSCliente | None = None) -> Relat
             potencia = _numero(v.get('generationPower'))
             inv.potencia_atual_kw = round(potencia, 3)
             inv.geracao_hoje_kwh = round(_numero(v.get('todayYield')), 3)
-            inv.status = _status_inversor(v.get('runningState'), potencia)
-            inv.ultima_leitura = horario_foxess(d.get('time')) or inv.ultima_leitura
+            momento = horario_foxess(d.get('time'))
+            noite = e_noite(momento or timezone.now(), fuso_do_inversor[sn])
+            inv.status = _status_inversor(v.get('runningState'), potencia, noite)
+            inv.ultima_leitura = momento or inv.ultima_leitura
             inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])
             rel.inversores += 1
 

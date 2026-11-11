@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, I18nPluralPipe } from '@angular/common';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, debounceTime, of, switchMap, tap } from 'rxjs';
@@ -17,7 +17,7 @@ const POR_PAGINA = 20;   // igual ao PAGE_SIZE da API
 /** Usinas: lista com busca, filtros, ordenação e paginação feitos na API. */
 @Component({
   selector: 'app-usinas',
-  imports: [DecimalPipe, RouterLink, LucideAngularModule],
+  imports: [DecimalPipe, I18nPluralPipe, RouterLink, LucideAngularModule],
   templateUrl: './usinas.component.html',
   styleUrl: './usinas.component.css',
 })
@@ -76,7 +76,7 @@ export class UsinasComponent {
   constructor() {
     // Permite chegar já filtrado, ex.: /usinas?status=alerta (links do dashboard)
     const st = inject(ActivatedRoute).snapshot.queryParamMap.get('status');
-    if (st === 'online' || st === 'alerta' || st === 'offline') this.status.set(st);
+    if (st === 'online' || st === 'noite' || st === 'alerta' || st === 'offline') this.status.set(st);
     this.api.resumo().subscribe({ next: r => this.resumo.set(r), error: () => {} });
   }
 

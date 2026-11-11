@@ -11,7 +11,7 @@
 <section class="card painel">
   <div class="painel-topo">
     <h3>
-      {{ resumo()?.total ?? 0 }} usina(s)
+      {{ (resumo()?.total ?? 0) | i18nPlural: {'=1': '# usina', 'other': '# usinas'} }}
       @if (resumo(); as r) { · <span class="num">{{ r.potencia_kwp | number: '1.2-2' }} kWp</span> }
     </h3>
     <span class="com-icone busca">
@@ -29,6 +29,8 @@
         Online <span class="qtd">{{ resumo()?.online }}</span></button>
       <button class="chip" [class.ativo]="status() === 'alerta'" (click)="definirStatus('alerta')">
         Alerta <span class="qtd">{{ resumo()?.alerta }}</span></button>
+      <button class="chip" [class.ativo]="status() === 'noite'" (click)="definirStatus('noite')">
+        Sem sol <span class="qtd">{{ resumo()?.noite }}</span></button>
       <button class="chip" [class.ativo]="status() === 'offline'" (click)="definirStatus('offline')">
         Offline <span class="qtd">{{ resumo()?.offline }}</span></button>
     </div>
@@ -44,7 +46,7 @@
   }
 
   <div class="tabela-wrap" [class.carregando]="carregando()">
-    <table class="tabela">
+    <table class="tabela em-cartoes">
       <thead>
         <tr>
           <th class="ordenavel" (click)="ordenar('nome')">Usina<span class="seta">{{ seta('nome') }}</span></th>
@@ -60,15 +62,15 @@
       <tbody>
         @for (u of resultado()?.results ?? []; track u.id) {
           <tr>
-            <td>
+            <td class="principal">
               <a class="usina-nome" [routerLink]="['/usinas', u.id]">{{ u.nome }}</a>
               <div class="usina-sub">{{ u.cidade || 'Sem cidade' }}{{ u.uf ? ' - ' + u.uf : '' }} · {{ u.plataforma_nome }}</div>
             </td>
-            <td>{{ u.fabricante_nome }}</td>
-            <td class="dir">{{ u.potencia_kwp | number: '1.2-2' }} kWp</td>
-            <td class="dir">{{ u.potencia_atual_kw | number: '1.1-1' }} kW</td>
-            <td class="dir">{{ u.geracao_hoje_kwh | number: '1.1-1' }} kWh</td>
-            <td class="dir">
+            <td data-rotulo="Fabricante">{{ u.fabricante_nome }}</td>
+            <td class="dir" data-rotulo="Instalada">{{ u.potencia_kwp | number: '1.2-2' }} kWp</td>
+            <td class="dir" data-rotulo="Agora">{{ u.potencia_atual_kw | number: '1.1-1' }} kW</td>
+            <td class="dir" data-rotulo="Hoje">{{ u.geracao_hoje_kwh | number: '1.1-1' }} kWh</td>
+            <td class="dir" data-rotulo="Mês vs. esperado">
               @let pct = desempenho(u);
               @if (pct !== null) {
                 <div class="desempenho">
@@ -79,11 +81,11 @@
                 <span class="usina-sub">—</span>
               }
             </td>
-            <td>
+            <td data-rotulo="Status">
               <span class="tag" [class]="classeStatus[u.status]">{{ rotuloStatus[u.status] }}</span>
               <div class="usina-sub">{{ ultimaLeitura(u.ultima_leitura) }}</div>
             </td>
-            <td class="dir">
+            <td class="dir" data-rotulo="Ações">
               <div class="acoes">
                 <a class="acao" [routerLink]="['/usinas', u.id]" title="Geração" aria-label="Ver geração">
                   <lucide-icon [img]="icones.ChartLine" [size]="16" [strokeWidth]="1.7" />

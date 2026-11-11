@@ -24,20 +24,24 @@ class DashboardEAlertasApiTests(APITestCase):
         Alerta.objects.create(usina=self.minha, tipo=Alerta.Tipo.BAIXO_DESEMPENHO, mensagem='Inversor 2 abaixo')
         Alerta.objects.create(usina=self.alheia, tipo=Alerta.Tipo.OFFLINE)
 
-    def test_dashboard_do_cliente_so_com_as_suas(self):
+    def test_cliente_nao_acessa_a_visao_geral(self):
         self.client.force_authenticate(self.cliente)
-        d = self.client.get('/api/dashboard/').data
-        self.assertEqual((d['kpis']['total'], d['kpis']['potencia_instalada_kwp']), (1, 10.0))
-        self.assertEqual(d['kpis']['desempenho_mes_pct'], 50.0)
-        self.assertEqual([a['motivo'] for a in d['atencao']], ['Inversor 2 abaixo'])
-        self.assertEqual(d['menor_desempenho'], [{'id': self.minha.pk, 'nome': 'Minha', 'pct': 50.0}])
-        self.assertEqual(len(d['geracao_mensal']), 12)
+        self.assertEqual(self.client.get('/api/dashboard/').status_code, 403)
 
     def test_dashboard_da_equipe_com_todas(self):
         self.client.force_authenticate(self.admin)
         d = self.client.get('/api/dashboard/').data
         self.assertEqual((d['kpis']['total'], d['kpis']['offline'], d['kpis']['alerta']), (2, 1, 1))
+        self.assertEqual(d['kpis']['potencia_instalada_kwp'], 60.0)
         self.assertEqual(d['atencao'][0]['nome'], 'Alheia')   # offline vem primeiro
+        self.assertEqual([a['motivo'] for a in d['atencao']], ['Sem comunicação', 'Inversor 2 abaixo'])
+        self.assertEqual(d['menor_desempenho'], [{'id': self.minha.pk, 'nome': 'Minha', 'pct': 50.0}])
+        self.assertEqual(len(d['geracao_mensal']), 12)
+
+    def test_colaborador_tambem_ve_a_visao_geral(self):
+        colab = Usuario.objects.create_user('colab@x.com', 'x', nome='Colab', perfil='colaborador')
+        self.client.force_authenticate(colab)
+        self.assertEqual(self.client.get('/api/dashboard/').data['kpis']['total'], 2)
 
     def test_curva_da_carteira_soma_em_blocos_de_5_min(self):
         dez_e_trinta_e_um = timezone.localtime().replace(hour=10, minute=31, second=0, microsecond=0)
@@ -50,3 +54,11 @@ class DashboardEAlertasApiTests(APITestCase):
         self.client.force_authenticate(self.cliente)
         r = self.client.get('/api/alertas/?aberto=true')
         self.assertEqual([a['usina_nome'] for a in r.data['results']], ['Minha'])
+
+    def test_usina_a_noite_nao_precisa_de_atencao(self):
+        self.alheia.status = Status.NOITE
+        self.alheia.save()
+        self.client.force_authenticate(self.admin)
+        d = self.client.get('/api/dashboard/').data
+        self.assertEqual([a['nome'] for a in d['atencao']], ['Minha'])
+        self.assertEqual(d['kpis']['noite'], 1)

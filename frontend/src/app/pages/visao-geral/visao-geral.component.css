@@ -14,6 +14,7 @@
 .status-resumo .ok { color: var(--ok); }
 .status-resumo .warn { color: var(--warn-txt); }
 .status-resumo .danger { color: var(--danger-txt); }
+.status-resumo .neutro { color: var(--muted); }
 
 /* ---------- Linhas: gráfico (2/3) + lista (1/3) ---------- */
 .linha { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }

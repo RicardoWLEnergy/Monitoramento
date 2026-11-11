@@ -117,15 +117,32 @@ class TempoRealTests(ColetaBase):
         self.assertEqual(Leitura.objects.get().potencia_kw, 30.0)
         self.assertEqual(float(GeracaoDiaria.objects.get(data=agora.date()).energia_kwh), 150.0)
 
-    def test_noite_fica_offline(self):
-        agora = timezone.localtime().strftime('%Y-%m-%d %H:%M:%S BRT-0300')
+    def desligado_as(self, hora: int):
+        texto = timezone.localdate().strftime(f'%Y-%m-%d {hora:02d}:00:00 BRT-0300')
         self.api.tempo_real.return_value = [
-            {'deviceSN': sn, 'time': agora, 'datas': [{'variable': 'generationPower', 'value': 0.0},
+            {'deviceSN': sn, 'time': texto, 'datas': [{'variable': 'generationPower', 'value': 0.0},
                                                       {'variable': 'runningState', 'value': '170'}]}
             for sn in ('SN-A', 'SN-B')]
         atualizar_tempo_real(api=self.api)
         self.usina.refresh_from_db()
-        self.assertEqual(self.usina.status, Status.OFFLINE)
+        return self.usina.status
+
+    def test_sem_geracao_a_noite_e_sem_sol(self):
+        self.assertEqual(self.desligado_as(22), Status.NOITE)
+        self.assertEqual(self.desligado_as(5), Status.NOITE)
+
+    def test_sem_geracao_de_dia_e_offline(self):
+        self.assertEqual(self.desligado_as(11), Status.OFFLINE)
+
+    def test_falha_a_noite_continua_alerta(self):
+        texto = timezone.localdate().strftime('%Y-%m-%d 22:00:00 BRT-0300')
+        self.api.tempo_real.return_value = [
+            {'deviceSN': 'SN-A', 'time': texto, 'datas': [{'variable': 'runningState', 'value': '165'}]},
+            {'deviceSN': 'SN-B', 'time': texto, 'datas': [{'variable': 'runningState', 'value': '170'}]},
+        ]
+        atualizar_tempo_real(api=self.api)
+        self.usina.refresh_from_db()
+        self.assertEqual(self.usina.status, Status.ALERTA)
 
 
 class PeriodoECoberturaTests(ColetaBase):

@@ -157,6 +157,18 @@ class CadastroPorSnTests(TestCase):
         self.assertEqual((u.limite_desempenho_pct, u.alertas_ativos), (70, False))
         self.assertIn(self.cliente, u.usuarios.all())
 
+    def test_recadastro_mantem_dados_editados_pela_equipe(self, Cliente):
+        Cliente.return_value = api_fox_simulada()
+        cadastrar_por_sn(Plataforma.FOXESS, 'SN-A', self.cliente)
+        Usina.objects.update(nome='Nome corrigido', potencia_kwp=119.6, cidade='Brasília', status=Status.OFFLINE)
+
+        outro = Usuario.objects.create_user('cli2@x.com', 'x', nome='Cliente 2')
+        cadastrar_por_sn(Plataforma.FOXESS, 'SN-B', outro)
+
+        u = Usina.objects.get()
+        self.assertEqual((u.nome, str(u.potencia_kwp), u.cidade), ('Nome corrigido', '119.60', 'Brasília'))
+        self.assertEqual(u.status, Status.ONLINE)   # o técnico (status) continua vindo da plataforma
+
     def test_sn_de_outra_conta_nao_grava_nada(self, Cliente):
         Cliente.return_value = api_fox_simulada()
         with self.assertRaisesMessage(CadastroErro, 'não encontrado na conta FoxESS'):

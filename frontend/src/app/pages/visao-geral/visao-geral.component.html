@@ -41,7 +41,7 @@
       <div class="kpi">
         <div class="kpi-topo"><span class="label">Potência instalada</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
         <strong>{{ k.potencia_instalada_kwp | number: '1.2-2' }} kWp</strong>
-        <small>{{ k.total }} usina(s) monitorada(s)</small>
+        <small>{{ k.total | i18nPlural: {'=1': '# usina monitorada', 'other': '# usinas monitoradas'} }}</small>
       </div>
 
       <div class="kpi">
@@ -50,6 +50,9 @@
           <a routerLink="/usinas" [queryParams]="{ status: 'online' }"><b class="ok">{{ k.online }}</b> online</a>
           <a routerLink="/usinas" [queryParams]="{ status: 'alerta' }"><b class="warn">{{ k.alerta }}</b> alerta</a>
           <a routerLink="/usinas" [queryParams]="{ status: 'offline' }"><b class="danger">{{ k.offline }}</b> offline</a>
+          @if (k.noite) {
+            <a routerLink="/usinas" [queryParams]="{ status: 'noite' }"><b class="neutro">{{ k.noite }}</b> sem sol</a>
+          }
         </div>
       </div>
     </section>
@@ -71,7 +74,7 @@
       <div class="card">
         <div class="card-topo">
           <h3>Precisam de atenção</h3>
-          <span class="sub">{{ dados()!.atencao.length }} usina(s) fora do normal</span>
+          <span class="sub">{{ dados()!.atencao.length | i18nPlural: {'=1': '# usina fora do normal', 'other': '# usinas fora do normal'} }}</span>
         </div>
         @if (dados()!.atencao.length) {
           <ul class="lista">

@@ -21,6 +21,7 @@ class Fabricante(models.TextChoices):
 
 class Status(models.TextChoices):
     ONLINE = 'online', 'Online'
+    NOITE = 'noite', 'Sem sol'      # sem geração por ser noite: normal, não é problema
     ALERTA = 'alerta', 'Alerta'
     OFFLINE = 'offline', 'Offline'
 

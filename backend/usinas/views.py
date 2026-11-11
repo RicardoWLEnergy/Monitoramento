@@ -12,12 +12,12 @@ from integracoes.foxess import FoxESSErro
 from integracoes.huawei import HuaweiErro
 from monitoramento.consultas import anotar_usinas, curva_do_dia, geracao_mensal
 from usuarios.models import Usuario
-from usuarios.permissoes import EhAdmin, EhEquipe, usinas_visiveis
+from usuarios.permissoes import ADMIN, EhAdmin, EhEquipe, perfil_de, usinas_visiveis
 
 from .models import GeracaoEsperada, Status
 from .serializers import (
-    GeracaoEsperadaSerializer, ImportarHistoricoSerializer, InversorSerializer, UsinaAlertasSerializer,
-    UsinaDetalheSerializer, UsinaListaSerializer, VinculoClientesSerializer,
+    CAMPOS_ALERTAS, GeracaoEsperadaSerializer, ImportarHistoricoSerializer, InversorSerializer,
+    UsinaDetalheSerializer, UsinaEdicaoSerializer, UsinaListaSerializer, VinculoClientesSerializer,
 )
 
 
@@ -44,14 +44,14 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         if self.action == 'list':
             return UsinaListaSerializer
         if self.action == 'partial_update':
-            return UsinaAlertasSerializer
+            return UsinaEdicaoSerializer
         return UsinaDetalheSerializer
 
     def get_permissions(self):
-        if self.action in ('partial_update', 'destroy'):
-            return [EhAdmin()]                       # alertas e "apagar": só Admin
-        if self.action in ('clientes', 'historico'):
-            return [EhEquipe()]                      # vincular clientes / importar histórico: Admin e Colaborador
+        if self.action == 'destroy':
+            return [EhAdmin()]                       # "apagar": só Admin
+        if self.action in ('partial_update', 'clientes', 'historico'):
+            return [EhEquipe()]                      # editar, vincular clientes, importar histórico: Admin e Colaborador
         if self.action == 'geracao_esperada' and self.request.method == 'PUT':
             return [EhAdmin()]
         return super().get_permissions()
@@ -59,6 +59,8 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
     def update(self, request, *args, **kwargs):
         if not kwargs.get('partial'):
             return Response({'detail': 'Use PATCH.'}, status=405)
+        if perfil_de(request.user) != ADMIN and any(campo in request.data for campo in CAMPOS_ALERTAS):
+            return Response({'detail': 'Apenas administradores alteram os alertas.'}, status=403)
         super().update(request, *args, **kwargs)
         return Response(UsinaDetalheSerializer(self.get_object(), context=self.get_serializer_context()).data)
 

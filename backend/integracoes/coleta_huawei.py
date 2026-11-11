@@ -20,7 +20,7 @@ from monitoramento.particoes import criar_particoes
 from usinas.models import Plataforma, Status, Usina
 
 from .cadastro import status_da_usina
-from .coleta import Relatorio, _gravar_dias, _meses_do_periodo, _numero, arredondar_5min, limite_curvas
+from .coleta import Relatorio, _gravar_dias, _meses_do_periodo, _numero, arredondar_5min, e_noite, limite_curvas
 from .huawei import HuaweiCliente, HuaweiErro
 
 ESTADOS_ONLINE = {512, 513, 514}      # conectado à rede (inclusive com limitação)
@@ -31,16 +31,21 @@ def cliente_huawei() -> HuaweiCliente:
     return HuaweiCliente(settings.HUAWEI_API_URL, settings.HUAWEI_USUARIO, settings.HUAWEI_SENHA)
 
 
-def _status_inversor(dados: dict) -> str:
+ESTADO_SEM_SOL = 40960               # standby: sem irradiância
+
+
+def _status_inversor(dados: dict, noite: bool = False) -> str:
     try:
         estado = int(float(dados.get('inverter_state')))
     except (TypeError, ValueError):
         estado = None
     if estado in ESTADOS_FALHA:
-        return Status.ALERTA
+        return Status.ALERTA                 # falha é alerta a qualquer hora
     if estado in ESTADOS_ONLINE or _numero(dados.get('active_power')) > 0:
         return Status.ONLINE
-    return Status.OFFLINE   # standby sem sol (noite), comunicação interrompida etc.
+    if estado == ESTADO_SEM_SOL or noite:
+        return Status.NOITE                  # sem sol: normal, não é problema
+    return Status.OFFLINE                    # de dia e sem gerar: comunicação interrompida etc.
 
 
 def _por_tipo(inversores) -> dict[int, list]:
@@ -59,6 +64,7 @@ def atualizar_tempo_real(usinas=None, api: HuaweiCliente | None = None) -> Relat
     qs = usinas if usinas is not None else Usina.objects.all()
     usinas = list(qs.ativas().filter(plataforma=Plataforma.HUAWEI).prefetch_related('inversores'))
     inversores = [inv for u in usinas for inv in u.inversores.all()]
+    fusos = {inv.numero_serie: u.fuso_horario for u in usinas for inv in u.inversores.all()}
     if not inversores:
         return rel
     api = api or cliente_huawei()
@@ -78,7 +84,7 @@ def atualizar_tempo_real(usinas=None, api: HuaweiCliente | None = None) -> Relat
                 continue
             inv.potencia_atual_kw = round(_numero(d.get('active_power')), 3)   # kW (a confirmar de dia)
             inv.geracao_hoje_kwh = round(_numero(d.get('day_cap')), 3)
-            inv.status = _status_inversor(d)
+            inv.status = _status_inversor(d, e_noite(agora, fusos[inv.numero_serie]))
             if _numero(d.get('run_state')) == 1:   # 1 = comunicando
                 inv.ultima_leitura = agora
             inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])

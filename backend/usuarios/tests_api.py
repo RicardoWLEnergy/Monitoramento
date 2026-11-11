@@ -116,6 +116,41 @@ class UsuariosApiTests(ApiBase):
         self.cliente.refresh_from_db()
         self.assertEqual(self.cliente.perfil, 'cliente')
 
+    def test_colaborador_edita_cliente(self):
+        self.entrar(self.colab)
+        r = self.client.patch(f'/api/usuarios/{self.cliente.pk}/', {
+            'nome': 'Cliente Editado', 'whatsapp': '(61) 97777-6666', 'endereco': 'SQS 308', 'senha': 'Nova-Senha-321'})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.cliente.refresh_from_db()
+        self.assertEqual((self.cliente.nome, self.cliente.whatsapp), ('Cliente Editado', '+5561977776666'))
+        self.assertTrue(self.cliente.check_password('Nova-Senha-321'))
+
+    def test_colaborador_nao_edita_outro_colaborador(self):
+        outro = Usuario.objects.create_user('outro@x.com', 'x', nome='Outro', perfil='colaborador')
+        self.entrar(self.colab)
+        self.assertEqual(self.client.patch(f'/api/usuarios/{outro.pk}/', {'nome': 'X'}).status_code, 404)
+
+    def test_admin_lista_so_a_equipe(self):
+        self.entrar(self.admin)
+        r = self.client.get('/api/usuarios/?perfil=admin,colaborador')
+        self.assertEqual(sorted(u['email'] for u in r.data['results']), ['admin@x.com', 'colab@x.com'])
+
+    def test_admin_nao_se_desativa_nem_muda_o_proprio_perfil(self):
+        self.entrar(self.admin)
+        url = f'/api/usuarios/{self.admin.pk}/'
+        self.assertEqual(self.client.patch(url, {'ativo': False}).status_code, 400)
+        self.assertEqual(self.client.patch(url, {'perfil': 'cliente'}).status_code, 400)
+        self.assertEqual(self.client.patch(url, {'nome': 'Admin Novo'}).status_code, 200)   # o resto pode
+        self.admin.refresh_from_db()
+        self.assertEqual((self.admin.perfil, self.admin.is_active), ('admin', True))
+
+    def test_admin_promove_colaborador_a_admin(self):
+        self.entrar(self.admin)
+        r = self.client.patch(f'/api/usuarios/{self.colab.pk}/', {'perfil': 'admin'})
+        self.assertEqual(r.status_code, 200)
+        self.colab.refresh_from_db()
+        self.assertEqual(self.colab.perfil, 'admin')
+
     @patch('usuarios.views.cadastrar_por_sn')
     def test_vincular_inversor(self, cadastrar):
         cadastrar.return_value = SimpleNamespace(

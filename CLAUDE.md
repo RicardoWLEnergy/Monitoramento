@@ -343,3 +343,70 @@ h1, h3, h4 { font-family: var(--font-display); letter-spacing: var(--tracking-ti
 - [ ] Funciona nos temas claro **e** escuro (só variáveis, nenhuma cor fixa clara).
 - [ ] Nenhum emoji; no máximo a seta `→`.
 - [ ] Números e moeda no formato pt-BR.
+
+---
+---
+
+# Projeto Monitoramento (específico deste repositório)
+
+> As seções acima são o guia de marca portátil da W.L Energy. Daqui para baixo vale
+> só para este projeto. Instalação e comandos detalhados: `README.md`.
+
+## Forma de trabalhar
+- **Toda alteração passa pela autorização do responsável**: explique o que vai mudar
+  (arquivos, regras, efeitos) antes de aplicar; ao terminar, resuma o que mudou.
+- **Commit e push são feitos pelo responsável** — não rodar `git commit`/`git push`.
+- **Estrutura simples e previsível**: antes de criar pastas novas, mostrar a árvore proposta.
+- O responsável não é especialista em banco de dados: explicar conceitos ao mexer no PostgreSQL.
+- Textos de tela sem jargão de desenvolvimento (nada de "em desenvolvimento", nomes de APIs,
+  fusos, SNs de exemplo reais etc.).
+
+## Arquitetura
+| Camada | Onde | Tecnologia |
+|---|---|---|
+| API | `backend/` | Django 5.2 + DRF + JWT (SimpleJWT) |
+| Banco | PostgreSQL 17 (`monitoramento`, usuário `wl_monitoramento`) | leituras particionadas por mês |
+| Telas | `frontend/` | Angular 19 (standalone, signals) + ECharts + Lucide |
+| Coleta | `manage.py coletar` | tempo real a cada 5 min + rotina diária |
+
+**Backend** — apps: `usuarios/` (login, perfis, `permissoes.py`), `usinas/`, `monitoramento/`
+(leituras, geração diária, alertas, consultas do dashboard, partições), `integracoes/`
+(clientes FoxESS e Huawei, cadastro por SN, coleta, coletor). Cada app usa os arquivos padrão do
+Django (`models`, `serializers`, `views`, `urls`, `admin`, `tests*.py`, `migrations/`).
+
+**Frontend** — só duas pastas em `src/app/`:
+- `pages/` → uma pasta por tela (login, shell/layout, visao-geral, usinas, usina-detalhe, clientes, usuarios);
+- `services/` → chamadas à API, login/JWT (guard + interceptor), gráficos, tema, formatação.
+Nada de `core/`, `shared/`, `layout/` etc.
+
+## Regras de negócio (não quebrar)
+- **Perfis**: Admin (tudo) · Colaborador (vê todas as usinas, cadastra/edita clientes, vincula, importa
+  histórico, edita dados cadastrais da usina; **não** altera alertas/geração esperada nem apaga) ·
+  Cliente (só as próprias usinas; não vê Visão geral nem Gestão). Regras **no servidor**, em
+  `usuarios/permissoes.py` — a tela só esconde.
+- **Só entra no banco o que for cadastrado**: cliente + plataforma + **SN de um inversor** → o sistema
+  busca a usina inteira na plataforma (`integracoes/cadastro.py`). Não existe criar usina pela API.
+- **Dados cadastrais da usina** (nome, endereço, kWp, coordenadas, fuso) vêm da plataforma só no
+  1º cadastro; depois valem as edições da equipe. Inversores, status e fabricante seguem a plataforma.
+- **"Apagar" usina = desativar** (`ativa=False`, só Admin, confirma digitando o nome): some do sistema,
+  perde os vínculos, o histórico fica; recadastrar uma SN dela a reativa.
+- **Usuários não são excluídos**, só desativados; ninguém desativa ou rebaixa a si mesmo.
+- **Status**: online · `noite` ("Sem sol", 18h–6h sem geração ou standby sem irradiância — normal,
+  não entra em "Precisam de atenção") · alerta (falha, a qualquer hora) · offline.
+- Leituras de 5 min: chave composta (usina, data_hora), arredondadas a 5 min, retenção de 13 meses;
+  energia diária sem limite. Tudo idempotente (reimportar não duplica).
+
+## Integrações
+- **FoxESS** (inclui inversores WEG `SIW…`): API key de instalador; assinatura md5 com `\r\n` literal;
+  1 req/s por rota. Tudo é por inversor — a usina é a soma. O detalhe do inversor às vezes falha
+  (41200): o cadastro usa a lista de inversores.
+- **Huawei FusionSolar**: conta Northbound (host `la5`); **uma conta por ambiente** (sessão única);
+  5 senhas erradas bloqueiam por 30 min. Curva histórica de 5 min (`getDevHistoryKpi`) não liberada
+  na conta atual (401) — a curva se forma pela coleta em tempo real.
+- Credenciais só no `backend/.env` (nunca no git).
+
+## Testes
+- Backend: `manage.py test` (deve terminar em `OK`). **Nenhum teste acessa as APIs reais** — sempre
+  simular a FoxESS/Huawei com respostas no formato real.
+- O frontend não tem testes automatizados (estrutura Karma/Jasmine removida de propósito);
+  conferir com `ng build` sem erros nem avisos.

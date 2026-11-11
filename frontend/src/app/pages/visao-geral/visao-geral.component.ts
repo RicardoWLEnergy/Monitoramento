@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, I18nPluralPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
 import {
@@ -13,7 +13,7 @@ import { GraficosService, echarts } from '../../services/graficos.service';
 /** Visão geral: dashboard das usinas visíveis ao usuário — o que importa saber de relance. */
 @Component({
   selector: 'app-visao-geral',
-  imports: [DecimalPipe, RouterLink, NgxEchartsDirective, LucideAngularModule],
+  imports: [DecimalPipe, I18nPluralPipe, RouterLink, NgxEchartsDirective, LucideAngularModule],
   providers: [provideEchartsCore({ echarts })],
   templateUrl: './visao-geral.component.html',
   styleUrl: './visao-geral.component.css',

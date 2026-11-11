@@ -10,21 +10,25 @@
 <aside class="sidebar" [class.aberta]="menuAberto()">
   <div class="sb-topo">
     <app-logo class="sb-logo" fundo="escuro" [altura]="30" />
-    <button class="sb-recolher" type="button" (click)="alternarSidebar()"
-            [attr.title]="recolhida() ? 'Expandir menu' : 'Recolher menu'"
-            [attr.aria-label]="recolhida() ? 'Expandir menu' : 'Recolher menu'">
-      <lucide-icon [img]="recolhida() ? icones.PanelLeftOpen : icones.PanelLeftClose" [size]="18" [strokeWidth]="1.7" />
+    <!-- Menu recolhido: o próprio WL é o botão de expandir -->
+    <button class="sb-marca" type="button" (click)="alternarSidebar()" title="Expandir menu" aria-label="Expandir menu">
+      <app-logo fundo="escuro" tipo="marca" [altura]="18" />
+    </button>
+    <button class="sb-recolher" type="button" (click)="alternarSidebar()" title="Recolher menu" aria-label="Recolher menu">
+      <lucide-icon [img]="icones.PanelLeftClose" [size]="18" [strokeWidth]="1.7" />
     </button>
   </div>
 
   <nav class="sb-nav">
     <div class="sb-label"><span class="txt">Monitoramento</span></div>
     @for (item of monitoramento; track item.rota) {
-      <a class="sb-item" [routerLink]="item.rota" routerLinkActive="ativo"
-         [attr.title]="recolhida() ? item.rotulo : null">
-        <lucide-icon [img]="item.icone" [size]="18" [strokeWidth]="1.7" />
-        <span class="txt">{{ item.rotulo }}</span>
-      </a>
+      @if (!item.soEquipe || auth.eEquipe()) {
+        <a class="sb-item" [routerLink]="item.rota" routerLinkActive="ativo"
+           [attr.title]="recolhida() ? item.rotulo : null">
+          <lucide-icon [img]="item.icone" [size]="18" [strokeWidth]="1.7" />
+          <span class="txt">{{ item.rotulo }}</span>
+        </a>
+      }
     }
 
     @if (auth.eEquipe()) {

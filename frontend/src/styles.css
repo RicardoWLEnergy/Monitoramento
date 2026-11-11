@@ -219,6 +219,24 @@ lucide-icon { display: inline-flex; flex: none; }
 .tabela td { padding: 11px 12px; border-top: 1px solid var(--line); }
 .tabela tbody tr { transition: background 120ms var(--ease-out); }
 .tabela tbody tr:hover { background: var(--row-hover); }
+
+/* Tabela que vira cartões no celular: <table class="tabela em-cartoes">, cada <td data-rotulo="...">.
+   A célula com class="principal" vira o título do cartão. */
+@media (max-width: 600px) {
+  .tabela.em-cartoes thead { display: none; }
+  .tabela.em-cartoes, .tabela.em-cartoes tbody, .tabela.em-cartoes tr { display: block; width: 100%; }
+  .tabela.em-cartoes tr { padding: 12px 16px; border-top: 1px solid var(--line); }
+  .tabela.em-cartoes td {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0; border: 0; text-align: right;
+  }
+  .tabela.em-cartoes td[data-rotulo]::before {
+    content: attr(data-rotulo); color: var(--muted); text-align: left; margin-right: auto;
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-wider);
+  }
+  .tabela.em-cartoes td.principal { display: block; text-align: left; padding-bottom: 8px; }
+  .tabela.em-cartoes td[colspan] { display: block; }
+}
 .tabela .dir { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- Alerta ---------- */

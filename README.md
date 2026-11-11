@@ -133,8 +133,6 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 | `coletar` | coleta automática: tempo real a cada 5 min + rotina diária (energia dos últimos dias, curva de ontem, partições) |
 | `coletar --uma-vez` | um ciclo completo e sai (bom para testar) |
 | `importar_historico [--usina ID] [--meses 13] [--dias 30]` | importa histórico de energia diária e curvas |
-| `vincular_inversor EMAIL SN --plataforma foxess\|huawei` | mesmo cadastro da tela de Clientes, pelo terminal |
-| `testar_integracao foxess\|huawei [--usina NOME] [--bruto]` | testa a conexão com a plataforma, **só leitura** |
 | `particoes_leitura` | cria as partições dos próximos meses e remove as antigas (o coletor já faz isso todo dia) |
 | `test` | roda os testes automáticos (nenhum acessa as APIs reais) |
 

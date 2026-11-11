@@ -1,5 +1,6 @@
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -58,7 +59,7 @@ class UsuarioViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.Retr
         if self._e_colaborador():
             qs = qs.filter(perfil=Usuario.Perfil.CLIENTE)
         if perfil := self.request.query_params.get('perfil'):
-            qs = qs.filter(perfil=perfil)
+            qs = qs.filter(perfil__in=perfil.split(','))   # ex.: ?perfil=admin,colaborador
         if (ativo := self.request.query_params.get('ativo')) in ('true', 'false'):
             qs = qs.filter(is_active=ativo == 'true')
         return qs
@@ -70,8 +71,15 @@ class UsuarioViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.Retr
             serializer.save()
 
     def perform_update(self, serializer):
+        dados = serializer.validated_data
         if self._e_colaborador():
-            serializer.validated_data.pop('perfil', None)   # colaborador não muda perfil
+            dados.pop('perfil', None)   # colaborador não muda perfil
+        if serializer.instance == self.request.user:
+            # Evita ficar sem acesso por engano (ex.: o último Admin se rebaixar ou se desativar)
+            if 'perfil' in dados and dados['perfil'] != self.request.user.perfil:
+                raise ValidationError({'perfil': 'Você não pode mudar o seu próprio perfil.'})
+            if dados.get('is_active') is False:
+                raise ValidationError({'ativo': 'Você não pode desativar o seu próprio acesso.'})
         serializer.save()
 
     @action(detail=True, methods=['post'], url_path='vincular-inversor')

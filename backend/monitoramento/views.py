@@ -2,7 +2,7 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from usuarios.permissoes import usinas_visiveis
+from usuarios.permissoes import EhEquipe, usinas_visiveis
 
 from .consultas import dashboard
 from .models import Alerta
@@ -10,7 +10,11 @@ from .serializers import AlertaSerializer
 
 
 class DashboardView(APIView):
-    """KPIs, curva de hoje, usinas que precisam de atenção, ranking e histórico — das usinas visíveis."""
+    """
+    Visão geral da carteira (KPIs, curva de hoje, usinas que precisam de atenção, ranking, histórico).
+    Só para a equipe WL (Admin e Colaborador): o Cliente vê direto a(s) usina(s) dele.
+    """
+    permission_classes = [EhEquipe]
 
     def get(self, request):
         return Response(dashboard(usinas_visiveis(request.user)))

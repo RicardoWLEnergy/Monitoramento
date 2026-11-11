@@ -16,7 +16,9 @@
 }
 
 <!-- ---------- Painel: novo cliente / vincular inversor ---------- -->
-@if (modo()) {
+@if (modo() === 'editar') {
+  <app-usuario-form [usuario]="alvo()" [perfis]="['cliente']" (salvo)="aoEditar($event)" (cancelar)="fechar()" />
+} @else if (modo()) {
   <form class="card painel-form" (ngSubmit)="enviar()">
     <div class="painel-topo">
       <div>
@@ -63,7 +65,7 @@
             @for (p of plataformas; track p.valor) { <option [value]="p.valor">{{ p.rotulo }}</option> }
           </select></label>
         <label class="campo"><span class="label">SN do inversor *</span>
-          <input class="input num" name="sn" [(ngModel)]="form.sn" required placeholder="Ex.: J0VB753048DG212"></label>
+          <input class="input num" name="sn" [(ngModel)]="form.sn" required placeholder="Número de série do inversor"></label>
       </div>
     </fieldset>
 
@@ -80,10 +82,10 @@
 <!-- ---------- Lista ---------- -->
 <section class="card lista">
   <div class="lista-topo">
-    <h3>{{ resultado()?.count ?? 0 }} cliente(s)</h3>
+    <h3>{{ (resultado()?.count ?? 0) | i18nPlural: {'=1': '# cliente', 'other': '# clientes'} }}</h3>
     <span class="com-icone busca">
       <lucide-icon [img]="icones.Search" [size]="16" [strokeWidth]="1.7" />
-      <input class="input" type="search" placeholder="Buscar por nome, e-mail, CPF ou WhatsApp"
+      <input class="input" type="search" placeholder="Buscar nome, e-mail ou CPF"
              [value]="busca()" (input)="definirBusca($any($event.target).value)">
     </span>
   </div>
@@ -115,10 +117,12 @@
             <td><span class="tag" [class.ok]="c.ativo" [class.neutral]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span></td>
             <td class="dir">
               <div class="acoes">
+                <button class="btn sm" type="button" (click)="abrirEdicao(c)">
+                  <lucide-icon [img]="icones.Pencil" [size]="14" [strokeWidth]="1.7" /> Editar
+                </button>
                 <button class="btn sm" type="button" (click)="abrirVincular(c)" title="Vincular outro inversor/usina">
                   <lucide-icon [img]="icones.SolarPanel" [size]="14" [strokeWidth]="1.7" /> Vincular
                 </button>
-                <button class="btn sm" type="button" (click)="alternarAtivo(c)">{{ c.ativo ? 'Desativar' : 'Reativar' }}</button>
               </div>
             </td>
           </tr>

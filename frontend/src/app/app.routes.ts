@@ -1,11 +1,6 @@
 import { Routes } from '@angular/router';
-import { authGuard, equipeGuard, visitanteGuard } from './services/auth.guard';
+import { adminGuard, authGuard, equipeGuard, inicioGuard, visitanteGuard } from './services/auth.guard';
 import { ShellComponent } from './pages/shell/shell.component';
-
-const emConstrucao = (titulo: string) => ({
-  loadComponent: () => import('./pages/em-construcao/em-construcao.component').then(m => m.EmConstrucaoComponent),
-  data: { titulo },
-});
 
 export const routes: Routes = [
   {
@@ -19,9 +14,11 @@ export const routes: Routes = [
     component: ShellComponent,
     canActivate: [authGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'visao-geral' },
+      // Tela inicial conforme o perfil (o guard sempre redireciona)
+      { path: '', pathMatch: 'full', canActivate: [inicioGuard], children: [] },
       {
         path: 'visao-geral',
+        canActivate: [equipeGuard],   // só Admin e Colaborador
         loadComponent: () => import('./pages/visao-geral/visao-geral.component').then(m => m.VisaoGeralComponent),
         title: 'Visão geral · W.L Energy',
       },
@@ -41,9 +38,12 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/clientes/clientes.component').then(m => m.ClientesComponent),
         title: 'Clientes · W.L Energy',
       },
-      { path: 'alertas',    ...emConstrucao('Alertas'),    title: 'Alertas · W.L Energy' },
-      { path: 'relatorios', ...emConstrucao('Relatórios'), title: 'Relatórios · W.L Energy' },
-      { path: 'usuarios',   ...emConstrucao('Usuários'),   title: 'Usuários · W.L Energy' },
+      {
+        path: 'usuarios',
+        canActivate: [adminGuard],   // equipe WL: só Admin
+        loadComponent: () => import('./pages/usuarios/usuarios.component').then(m => m.UsuariosComponent),
+        title: 'Usuários · W.L Energy',
+      },
     ],
   },
   { path: '**', redirectTo: '' },

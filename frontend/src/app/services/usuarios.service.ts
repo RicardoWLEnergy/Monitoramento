@@ -44,7 +44,8 @@ export interface ResultadoVinculo {
 export class UsuariosService {
   private readonly http = inject(HttpClient);
 
-  listar(filtro: { busca?: string; perfil?: Perfil; page?: number }): Observable<Pagina<UsuarioCadastro>> {
+  /** `perfil` aceita um ou vários separados por vírgula (ex.: 'admin,colaborador'). */
+  listar(filtro: { busca?: string; perfil?: Perfil | string; page?: number }): Observable<Pagina<UsuarioCadastro>> {
     let params = new HttpParams();
     for (const [chave, valor] of Object.entries(filtro)) {
       if (valor) params = params.set(chave, String(valor));

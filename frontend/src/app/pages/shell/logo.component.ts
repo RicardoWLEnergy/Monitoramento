@@ -5,6 +5,7 @@ import { TemaService } from '../../services/tema.service';
  * Logo W.L Energy.
  *  - fundo="tema"   → segue o tema: escuro = ENERGYWL (branco), claro = ENERGY_BLACKWL (preto)
  *  - fundo="escuro" → superfícies SEMPRE pretas (sidebar, topo mobile, login): usa sempre o branco
+ *  - tipo="marca"   → só o monograma WL (menu recolhido). Existe só a versão branca (fundo preto).
  */
 @Component({
   selector: 'app-logo',
@@ -15,9 +16,11 @@ export class LogoComponent {
   private readonly tema = inject(TemaService);
 
   readonly fundo = input<'tema' | 'escuro'>('tema');
+  readonly tipo = input<'completo' | 'marca'>('completo');
   readonly altura = input(28);
 
   readonly arquivo = computed(() => {
+    if (this.tipo() === 'marca') return 'wl-mark-white.png';
     const escuro = this.fundo() === 'escuro' || this.tema.tema() === 'escuro';
     return escuro ? 'ENERGYWL.png' : 'ENERGY_BLACKWL.png';
   });

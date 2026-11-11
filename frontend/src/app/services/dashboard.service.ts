@@ -14,6 +14,7 @@ export interface Dashboard {
     total: number;
     online: number;
     alerta: number;
+    noite: number;
     offline: number;
   };
   atencao: { id: number; nome: string; status: StatusUsina; ultima_leitura: string | null; motivo: string }[];

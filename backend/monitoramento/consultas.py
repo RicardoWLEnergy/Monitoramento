@@ -106,7 +106,8 @@ def dashboard(usinas, hoje: date | None = None) -> dict:
     for a in Alerta.objects.filter(usina__in=[u.pk for u in lista], fim__isnull=True).order_by('inicio'):
         alertas[a.usina_id] = a.mensagem or a.get_tipo_display()
 
-    atencao = sorted((u for u in lista if u.status != Status.ONLINE),
+    # Noite (sem sol) é normal: não entra em "precisam de atenção"
+    atencao = sorted((u for u in lista if u.status not in (Status.ONLINE, Status.NOITE)),
                      key=lambda u: (u.status != Status.OFFLINE, u.nome))
     desempenho = sorted(
         ((u, u.geracao_mes_kwh / u.esperado_mes_kwh * 100) for u in lista if u.esperado_mes_kwh),

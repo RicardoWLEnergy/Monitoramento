@@ -11,7 +11,7 @@
   <!-- ---------- Cabeçalho ---------- -->
   <header class="cabecalho">
     <div>
-      <div class="eyebrow">Usina · {{ u.fabricante_nome }} · {{ u.plataforma_nome }}</div>
+      <div class="eyebrow">Usina · {{ u.fabricante_nome }}</div>
       <div class="titulo">
         <h1>{{ u.nome }}</h1>
         <span class="tag" [class]="classeStatus[u.status]">{{ rotuloStatus[u.status] }}</span>
@@ -25,7 +25,7 @@
           </a>
         }
         <span class="num">{{ u.potencia_kwp | number: '1.2-2' }} kWp</span>
-        <span>{{ inversores().length }} inversor(es)</span>
+        <span>{{ inversores().length | i18nPlural: {'=1': '# inversor', 'other': '# inversores'} }}</span>
       </div>
     </div>
   </header>
@@ -44,7 +44,7 @@
   @if (aba() === 'configuracoes') {
     <app-usina-config [usina]="u" (atualizada)="aoAtualizar($event)" (importado)="carregar()" />
   } @else {
-    @if (u.status !== 'online') {
+    @if (u.status === 'alerta' || u.status === 'offline') {
       <div class="alerta" [class.erro]="u.status === 'offline'">
         @if (u.status === 'offline') {
           Sem comunicação · última leitura: {{ dataHora(u.ultima_leitura) }}.
@@ -86,7 +86,6 @@
       <div class="card-topo">
         <div>
           <h3>Potência ao longo do dia</h3>
-          <span class="sub">Leituras a cada 5 minutos · fuso {{ u.fuso_horario }}</span>
         </div>
         <input class="input data" type="date" [max]="hoje" [value]="dataCurva()"
                (change)="mudarDia($any($event.target).value)" aria-label="Dia da curva">
@@ -140,12 +139,12 @@
       <div class="card-topo">
         <div>
           <h3>Inversores</h3>
-          <span class="sub">{{ inversores().length }} equipamento(s)</span>
+          <span class="sub">{{ inversores().length | i18nPlural: {'=1': '# equipamento', 'other': '# equipamentos'} }}</span>
         </div>
         <lucide-icon class="icone-sub" [img]="icones.Cpu" [size]="18" [strokeWidth]="1.7" />
       </div>
       <div class="tabela-wrap">
-        <table class="tabela">
+        <table class="tabela em-cartoes">
           <thead>
             <tr>
               <th>Nº de série (SN)</th><th>Modelo</th>
@@ -155,12 +154,12 @@
           <tbody>
             @for (inv of inversores(); track inv.id) {
               <tr>
-                <td class="num forte">{{ inv.numero_serie }}</td>
-                <td>{{ inv.modelo || '—' }}</td>
-                <td class="dir">{{ inv.potencia_nominal_kw | number: '1.1-1' }} kW</td>
-                <td class="dir">{{ inv.potencia_atual_kw | number: '1.1-1' }} kW</td>
-                <td class="dir">{{ inv.geracao_hoje_kwh | number: '1.1-1' }} kWh</td>
-                <td>
+                <td class="num forte principal">{{ inv.numero_serie }}</td>
+                <td data-rotulo="Modelo">{{ inv.modelo || '—' }}</td>
+                <td class="dir" data-rotulo="Nominal">{{ inv.potencia_nominal_kw | number: '1.1-1' }} kW</td>
+                <td class="dir" data-rotulo="Agora">{{ inv.potencia_atual_kw | number: '1.1-1' }} kW</td>
+                <td class="dir" data-rotulo="Hoje">{{ inv.geracao_hoje_kwh | number: '1.1-1' }} kWh</td>
+                <td data-rotulo="Status">
                   <span class="tag" [class]="classeStatus[inv.status]">{{ rotuloStatus[inv.status] }}</span>
                   <div class="sub">{{ dataHora(inv.ultima_leitura) }}</div>
                 </td>

@@ -2,11 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-export type StatusUsina = 'online' | 'alerta' | 'offline';
+/** 'noite' = sem geração por falta de sol (normal, não é problema). */
+export type StatusUsina = 'online' | 'noite' | 'alerta' | 'offline';
 export type Plataforma = 'foxess' | 'huawei';
 
-export const ROTULO_STATUS: Record<StatusUsina, string> = { online: 'Online', alerta: 'Alerta', offline: 'Offline' };
-export const CLASSE_STATUS: Record<StatusUsina, string> = { online: 'ok', alerta: 'warn', offline: 'danger' };
+export const ROTULO_STATUS: Record<StatusUsina, string> = { online: 'Online', noite: 'Sem sol', alerta: 'Alerta', offline: 'Offline' };
+export const CLASSE_STATUS: Record<StatusUsina, string> = { online: 'ok', noite: 'neutral', alerta: 'warn', offline: 'danger' };
 export const PLATAFORMAS: { valor: Plataforma; rotulo: string }[] = [
   { valor: 'foxess', rotulo: 'FoxESS Cloud' },
   { valor: 'huawei', rotulo: 'Huawei FusionSolar' },
@@ -47,6 +48,18 @@ export interface UsinaDetalhe extends UsinaLista {
   clientes?: ClienteVinculado[];   // só vem para Admin/Colaborador
 }
 
+/** Dados cadastrais que a equipe pode corrigir (vêm da plataforma só no primeiro cadastro). */
+export interface DadosUsina {
+  nome: string;
+  endereco: string;
+  cidade: string;
+  uf: string;
+  latitude: number | null;
+  longitude: number | null;
+  potencia_kwp: number;
+  fuso_horario: string;
+}
+
 export interface ConfigAlertas {
   alertas_ativos: boolean;
   limite_desempenho_pct: number;
@@ -78,7 +91,7 @@ export interface MesGeracao {
 export interface GeracaoEsperada { mes: number; energia_kwh: number; }
 
 export interface ResumoUsinas {
-  total: number; potencia_kwp: number; online: number; alerta: number; offline: number;
+  total: number; potencia_kwp: number; online: number; noite: number; alerta: number; offline: number;
 }
 
 /** O que já existe no banco para a usina. */
@@ -147,6 +160,12 @@ export class UsinasService {
     return this.http.put<GeracaoEsperada[]>(`/api/usinas/${id}/geracao-esperada/`, valores);
   }
 
+  /** Admin e Colaborador. */
+  salvarDados(id: number, dados: DadosUsina): Observable<UsinaDetalhe> {
+    return this.http.patch<UsinaDetalhe>(`/api/usinas/${id}/`, dados);
+  }
+
+  /** Só Admin. */
   salvarAlertas(id: number, config: ConfigAlertas): Observable<UsinaDetalhe> {
     return this.http.patch<UsinaDetalhe>(`/api/usinas/${id}/`, config);
   }
