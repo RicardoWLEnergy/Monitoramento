@@ -1,0 +1,79 @@
+# Os 5 contêineres do Monitoramento. Configurações e senhas vêm do arquivo .env (fora do git).
+# Modelo do .env: .env.producao.example
+services:
+
+  # ---------- Banco de dados ----------
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Ajustado para servidor pequeno (3,8 GB de memória)
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=1GB -c max_connections=30
+    volumes:
+      - dados_postgres:/var/lib/postgresql/data      # os dados ficam aqui (sobrevivem a tudo)
+    healthcheck:                                      # "o banco já está pronto?"
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------- API (Django + Gunicorn) ----------
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db: { condition: service_healthy }              # só sobe depois do banco estar pronto
+    restart: unless-stopped
+
+  # ---------- Coleta automática (mesma imagem do backend) ----------
+  coletor:
+    build: ./backend
+    command: python manage.py coletar
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+  # ---------- Portaria (Caddy + telas): o ÚNICO aberto para a internet ----------
+  web:
+    build: ./frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+      TLS_MODO: ${TLS_MODO}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro           # configuração (muda sem recompilar)
+      - caddy_dados:/data                             # certificados HTTPS
+      - caddy_config:/config
+    depends_on: [backend]
+    restart: unless-stopped
+
+  # ---------- Backup diário do banco (mantém os últimos 14 dias) ----------
+  backup:
+    image: postgres:17-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups                            # pasta "backups" ao lado deste arquivo
+    entrypoint: >
+      sh -c 'while true; do
+        pg_dump -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -F c -f /backups/monitoramento-$$(date +%F).dump;
+        find /backups -name "*.dump" -mtime +14 -delete;
+        sleep 86400;
+      done'
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  dados_postgres:
+  caddy_dados:
+  caddy_config:

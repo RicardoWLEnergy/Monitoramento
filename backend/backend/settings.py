@@ -46,6 +46,7 @@ AUTH_USER_MODEL = 'usuarios.Usuario'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',   # entrega /static/ (arquivos do /admin) em produção
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # precisa vir antes do CommonMiddleware
     'django.middleware.common.CommonMiddleware',
@@ -79,6 +80,8 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': env.db('DATABASE_URL'),
 }
+# Mantém a conexão com o banco aberta por 60 s entre requisições (menos esforço do banco)
+DATABASES['default']['CONN_MAX_AGE'] = 60
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -101,6 +104,27 @@ USE_TZ = True  # grava em UTC no banco e converte para o fuso acima
 
 # ---------- Arquivos estáticos ----------
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'   # onde o "collectstatic" junta os arquivos do /admin
+
+
+# ---------- Produção (atrás do Caddy) ----------
+# O Caddy recebe o HTTPS e repassa ao Django avisando "a conexão original era segura"
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Endereço público do sistema, ex.: https://monitoramento.wlenergy.com.br (ou https://IP)
+CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=[])
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True    # cookies do /admin só trafegam por HTTPS
+    CSRF_COOKIE_SECURE = True
+
+# Erros aparecem no "docker compose logs" (sem isso, em produção ficariam invisíveis)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'simples': {'format': '%(asctime)s %(levelname)s %(message)s', 'datefmt': '%d/%m %H:%M:%S'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'simples'}},
+    'root': {'handlers': ['console'], 'level': 'WARNING'},
+    'loggers': {'coletor': {'level': 'INFO'}},   # o coletor mostra cada ciclo (não só os erros)
+}
 
 
 # ---------- Monitoramento ----------

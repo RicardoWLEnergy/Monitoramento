@@ -1,0 +1,31 @@
+# Portaria do sistema (Caddy). O endereço vem do .env:
+#   sem domínio → SITE_ADDRESS=https://IP_DO_SERVIDOR      e TLS_MODO=internal (certificado próprio)
+#   com domínio → SITE_ADDRESS=monitoramento.wlenergy.com.br e TLS_MODO=seu-email (certificado oficial)
+{$SITE_ADDRESS} {
+	tls {$TLS_MODO}
+
+	# Compacta as respostas (carrega mais rápido)
+	encode zstd gzip
+
+	# API, painel /admin e seus arquivos → Django (Gunicorn)
+	# (/admin sem barra também: o Django completa para /admin/)
+	@django path /api/* /admin /admin/* /static/*
+	handle @django {
+		reverse_proxy backend:8000
+	}
+
+	# Todo o resto → telas do Angular (rotas como /usinas/3 abrem o index.html)
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Cabeçalhos de segurança
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

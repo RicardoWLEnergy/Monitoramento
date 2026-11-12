@@ -1,0 +1,5 @@
+# O que NÃO entra na imagem do frontend
+node_modules/
+dist/
+.angular/
+.vscode/

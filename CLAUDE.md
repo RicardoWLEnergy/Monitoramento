@@ -356,6 +356,8 @@ h1, h3, h4 { font-family: var(--font-display); letter-spacing: var(--tracking-ti
 - **Toda alteração passa pela autorização do responsável**: explique o que vai mudar
   (arquivos, regras, efeitos) antes de aplicar; ao terminar, resuma o que mudou.
 - **Commit e push são feitos pelo responsável** — não rodar `git commit`/`git push`.
+- **Nunca criar, editar ou copiar valores de arquivos `.env`** (são sensíveis). Alterar só os modelos
+  (`backend/.env.example`, `.env.producao.example`); os valores reais o responsável preenche.
 - **Estrutura simples e previsível**: antes de criar pastas novas, mostrar a árvore proposta.
 - O responsável não é especialista em banco de dados: explicar conceitos ao mexer no PostgreSQL.
 - Textos de tela sem jargão de desenvolvimento (nada de "em desenvolvimento", nomes de APIs,
