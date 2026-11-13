@@ -10,6 +10,9 @@ e mostra tudo em um painel web com acesso por perfil.
 | Banco de dados | PostgreSQL 17 |
 | Frontend (telas) | Angular 19 + ECharts (gráficos) + Lucide (ícones) |
 | Coleta | comando `coletar` (tempo real a cada 5 min + rotina diária) |
+| Produção | Docker Compose + Caddy (HTTPS) — **https://monitoramento.wlenergy.com.br** |
+
+A seção **Instalação** abaixo é para desenvolvimento num computador; o servidor está em **Produção (Docker)**.
 
 ---
 
@@ -172,6 +175,73 @@ As leituras de 5 min são mantidas por 13 meses (`LEITURAS_RETENCAO_MESES`); a e
 
 ---
 
+## Produção (Docker)
+
+No ar em **https://monitoramento.wlenergy.com.br** — servidor Ubuntu com Docker Compose.
+O código fica em `~/monitoramento` no servidor (clonado do GitHub por uma Deploy Key só de leitura).
+
+### Como funciona
+```
+Internet ──HTTPS──► web (Caddy) ─┬─ /api, /admin, /static → backend (Django + Gunicorn)
+                                 └─ resto                 → telas do Angular (já compiladas)
+                    backend ──► db (PostgreSQL 17, volume dados_postgres)
+                    coletor ──► db   (manage.py coletar: FoxESS/Huawei a cada 5 min)
+                    backup  ──► db   (pg_dump diário em ./backups, mantém 14 dias)
+```
+| Arquivo | Papel |
+|---|---|
+| `docker-compose.yml` | os 5 contêineres (db, backend, coletor, web, backup) |
+| `Caddyfile` | HTTPS automático e encaminhamento `/api`, `/admin`, `/static` → Django |
+| `backend/Dockerfile` | imagem do Django (usada pela API e pelo coletor) |
+| `frontend/Dockerfile` | compila o Angular e entrega pelo Caddy |
+| `.env.producao.example` | modelo das configurações; no servidor vira `.env` (fora do git) |
+
+Só o Caddy fica aberto para a internet (portas 80/443). O banco não tem porta publicada.
+
+### Primeira instalação (servidor novo)
+1. Ubuntu atualizado, **swap de 2 GB**, firewall `ufw` liberando só OpenSSH, 80 e 443.
+2. Docker + plugin Compose (repositório oficial do Docker ou `docker.io` + `docker-compose-v2` do Ubuntu).
+3. Deploy Key: `ssh-keygen` no servidor → GitHub → *Settings → Deploy keys* (sem escrita) →
+   `git clone git@github.com:RicardoWLEnergy/Monitoramento.git ~/monitoramento`.
+4. `cp .env.producao.example .env` e preencher (chave e senha geradas com `openssl rand -hex 50` / `-hex 24`;
+   a senha do banco deve ter só letras e números).
+5. Subir:
+   ```bash
+   docker compose up -d --build
+   docker compose exec backend python manage.py migrate
+   docker compose exec backend python manage.py createsuperuser
+   ```
+O domínio precisa apontar para o IP do servidor **antes** de subir: o Caddy pede o certificado sozinho.
+
+### Atualizar o sistema (depois de um push)
+```bash
+cd ~/monitoramento
+git pull
+docker compose up -d --build
+docker compose exec backend python manage.py migrate
+```
+Mudou só o `Caddyfile`? Basta `docker compose restart web`.
+
+### Comandos do dia a dia (no servidor, em `~/monitoramento`)
+| Para | Comando |
+|---|---|
+| Ver os contêineres | `docker compose ps` |
+| Registros do coletor | `docker compose logs -f coletor` (sair com `Ctrl + C`) |
+| Registros da API | `docker compose logs --tail 50 backend` |
+| Comando do Django | `docker compose exec backend python manage.py <comando>` |
+| Reiniciar uma parte | `docker compose restart <serviço>` |
+| Parar tudo (os dados ficam) | `docker compose down` |
+| Ver os backups | `ls -lh backups/` |
+
+### Cuidados
+- **Huawei**: a conta Northbound roda no servidor — não usar a mesma conta em outro lugar ao mesmo tempo
+  (nem o coletor local).
+- **Nunca** publicar a porta do banco como `"5432:5432"`: o Docker passa por cima do `ufw` e a exporia à internet.
+  Para acessar pelo Beekeeper, publicar só em `127.0.0.1` e usar túnel SSH.
+- O `.env` do servidor tem todas as senhas: nunca copiar para o git nem enviar por mensagem.
+
+---
+
 ## Problemas comuns
 
 | Sintoma | Causa / solução |
@@ -183,3 +253,5 @@ As leituras de 5 min são mantidas por 13 meses (`LEITURAS_RETENCAO_MESES`); a e
 | FoxESS: `errno=41200` | instabilidade da FoxESS em uma rota; o cadastro já contorna |
 | `Já existe um coletor rodando` | outro `coletar` está aberto; encerre-o antes |
 | Inserir leitura dá erro de partição | rode `particoes_leitura` (o coletor faz isso todo dia) |
+| Produção: `/admin` abre a tela do sistema | o `Caddyfile` precisa encaminhar `/admin` (sem barra) e `/admin/*` ao Django |
+| Produção: contêiner reiniciando sem parar | `docker compose logs <serviço>` mostra o motivo |
