@@ -26,12 +26,26 @@ A seção **Instalação** abaixo é para desenvolvimento num computador; o serv
 
 As regras ficam em um só lugar: `backend/usuarios/permissoes.py`.
 
+### Login
+- **E-mail + senha** ou **e-mail + código pelo WhatsApp**: o sistema envia um código de 6 números ao
+  WhatsApp cadastrado naquele e-mail e mostra o final do número (ex.: "(61) * ****-0142").
+  O código vale 5 minutos, uma única vez, e é bloqueado após 5 tentativas erradas; no máximo
+  1 envio por minuto e 5 por hora. O banco guarda só o hash do código.
+- **Fechar o navegador encerra a sessão.** Guias abertas ao mesmo tempo compartilham o login; sair em
+  uma sai de todas. Validade máxima do login: 12 horas (`JWT_REFRESH_HOURS`).
+
 ## Como uma usina entra no sistema
 
 Só entra no banco o que for cadastrado. Em **Clientes → Novo cliente**, informe os dados do cliente,
 a **plataforma** e a **SN de um inversor**. O sistema busca a usina daquela SN na plataforma, grava a
 usina inteira (todos os inversores) e vincula o cliente. Depois, em **Usina → Configurações →
 Histórico de geração**, dá para importar os dias anteriores.
+
+A importação de histórico roda **no servidor, em segundo plano**: o botão só coloca o pedido na fila e
+a página pode ser fechada. Quem importa é o **coletor** (`manage.py coletar`), em pedaços (1 mês de
+energia ou 1 dia de curva por vez), só no tempo livre entre os ciclos de tempo real: o monitoramento ao
+vivo tem prioridade. Se o coletor reiniciar, a importação continua de onde parou. Em desenvolvimento,
+o coletor precisa estar aberto num terminal, senão o pedido fica "Na fila".
 
 "Apagar" uma usina só a **desativa**: ela some do sistema, mas o histórico fica no banco e volta se a
 SN de um inversor dela for cadastrada de novo.
@@ -133,9 +147,8 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 
 | Comando | Para quê |
 |---|---|
-| `coletar` | coleta automática: tempo real a cada 5 min + rotina diária (energia dos últimos dias, curva de ontem, partições) |
+| `coletar` | coleta automática: tempo real a cada 5 min + rotina diária (energia dos últimos dias, curva de ontem, partições) + importações de histórico pedidas na tela |
 | `coletar --uma-vez` | um ciclo completo e sai (bom para testar) |
-| `importar_historico [--usina ID] [--meses 13] [--dias 30]` | importa histórico de energia diária e curvas |
 | `particoes_leitura` | cria as partições dos próximos meses e remove as antigas (o coletor já faz isso todo dia) |
 | `test` | roda os testes automáticos (nenhum acessa as APIs reais) |
 
@@ -158,6 +171,13 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 - 5 senhas erradas em 10 minutos bloqueiam a conta por 30 minutos.
 - A curva de 5 min do **histórico** (`getDevHistoryKpi`) ainda não está liberada na conta atual (erro 401):
   a energia diária funciona, e a curva de 5 min se forma pela coleta de tempo real daqui para frente.
+
+### uazapi (WhatsApp, código de acesso no login)
+- Variáveis no `.env`: `UAZAPI_URL` (endereço do servidor, no painel da uazapi) e `UAZAPI_TOKEN`
+  (token da **instância**, não o admintoken). Vazias = a opção de código responde "indisponível".
+- Envio: `POST {UAZAPI_URL}/send/text` (doc: https://docs.uazapi.com/reference/sendText.md).
+- A instância precisa estar conectada ao WhatsApp no painel da uazapi; falhas ficam no registro do
+  servidor (sem o token) e a tela pede para tentar de novo ou entrar com a senha.
 
 ---
 
@@ -182,8 +202,9 @@ O código fica em `~/monitoramento` no servidor (clonado do GitHub por uma Deplo
 
 ### Como funciona
 ```
-Internet ──HTTPS──► web (Caddy) ─┬─ /api, /admin, /static → backend (Django + Gunicorn)
-                                 └─ resto                 → telas do Angular (já compiladas)
+Internet ──HTTPS──► web (Caddy) ─┬─ /api, /static → backend (Django + Gunicorn)
+                                 └─ resto         → telas do Angular (já compiladas)
+Servidor (só dentro dele) ── 127.0.0.1:8001 → backend  (painel /admin, por túnel SSH)
                     backend ──► db (PostgreSQL 17, volume dados_postgres)
                     coletor ──► db   (manage.py coletar: FoxESS/Huawei a cada 5 min)
                     backup  ──► db   (pg_dump diário em ./backups, mantém 14 dias)
@@ -191,12 +212,13 @@ Internet ──HTTPS──► web (Caddy) ─┬─ /api, /admin, /static → ba
 | Arquivo | Papel |
 |---|---|
 | `docker-compose.yml` | os 5 contêineres (db, backend, coletor, web, backup) |
-| `Caddyfile` | HTTPS automático e encaminhamento `/api`, `/admin`, `/static` → Django |
+| `Caddyfile` | HTTPS automático, cabeçalhos de segurança e encaminhamento `/api`, `/static` → Django |
 | `backend/Dockerfile` | imagem do Django (usada pela API e pelo coletor) |
 | `frontend/Dockerfile` | compila o Angular e entrega pelo Caddy |
 | `.env.producao.example` | modelo das configurações; no servidor vira `.env` (fora do git) |
 
 Só o Caddy fica aberto para a internet (portas 80/443). O banco não tem porta publicada.
+O painel `/admin` do Django **não** fica na internet: só pelo próprio servidor (ver "Painel /admin").
 
 ### Primeira instalação (servidor novo)
 1. Ubuntu atualizado, **swap de 2 GB**, firewall `ufw` liberando só OpenSSH, 80 e 443.
@@ -221,6 +243,26 @@ docker compose up -d --build
 docker compose exec backend python manage.py migrate
 ```
 Mudou só o `Caddyfile`? Basta `docker compose restart web`.
+
+### Painel /admin (só pelo servidor)
+O backend escuta em `127.0.0.1:8001` **dentro** do servidor. Do seu computador, abra um túnel SSH:
+```bash
+ssh -L 8001:127.0.0.1:8001 usuario@IP_DO_SERVIDOR
+```
+e, com o terminal aberto, acesse **http://localhost:8001/admin/**. Requisitos no `.env` do servidor:
+`DJANGO_ALLOWED_HOSTS` com `localhost` (ex.: `monitoramento.wlenergy.com.br,localhost`).
+
+### Segurança em produção
+- **Login:** até 10 tentativas por minuto por IP; 10 senhas erradas no mesmo e-mail bloqueiam o login com
+  senha por 15 min. Trocar a senha derruba os logins abertos. Os contadores ficam na tabela `cache_sistema`
+  (criada pelo `migrate`).
+- **Chave secreta:** o sistema não inicia em produção com a chave de exemplo ou curta.
+- **Cabeçalhos:** HSTS (só HTTPS) e uma política de conteúdo (CSP) em modo "só observa". Depois de alguns
+  dias sem avisos no console do navegador (F12), trocar `Content-Security-Policy-Report-Only` por
+  `Content-Security-Policy` no `Caddyfile` e `docker compose restart web`. Se o script de tema do
+  `frontend/src/index.html` mudar, atualizar o hash `sha256-...` dele no `Caddyfile`.
+- **Backups:** gravados só para o dono; deixe a pasta fechada: `chmod 700 backups`. Falha aparece em
+  `docker compose logs backup` como "BACKUP FALHOU". Recomendado: copiar para fora da VPS.
 
 ### Comandos do dia a dia (no servidor, em `~/monitoramento`)
 | Para | Comando |

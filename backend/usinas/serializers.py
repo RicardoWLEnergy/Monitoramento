@@ -14,13 +14,14 @@ class UsinaListaSerializer(serializers.ModelSerializer):
     geracao_hoje_kwh = serializers.FloatField(read_only=True)
     geracao_mes_kwh = serializers.FloatField(read_only=True)
     esperado_mes_kwh = serializers.FloatField(read_only=True)
+    esperado_ate_hoje_kwh = serializers.FloatField(read_only=True)   # proporcional aos dias já passados no mês
 
     class Meta:
         model = Usina
         fields = [
             'id', 'nome', 'plataforma', 'plataforma_nome', 'fabricante', 'fabricante_nome',
             'cidade', 'uf', 'potencia_kwp', 'status', 'ultima_leitura',
-            'potencia_atual_kw', 'geracao_hoje_kwh', 'geracao_mes_kwh', 'esperado_mes_kwh',
+            'potencia_atual_kw', 'geracao_hoje_kwh', 'geracao_mes_kwh', 'esperado_mes_kwh', 'esperado_ate_hoje_kwh',
         ]
 
 

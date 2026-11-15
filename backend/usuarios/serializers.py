@@ -27,6 +27,17 @@ class LoginSerializer(TokenObtainPairSerializer):
         return super().validate(attrs)
 
 
+class PedirCodigoSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, valor):
+        return valor.strip().lower()
+
+
+class EntrarComCodigoSerializer(PedirCodigoSerializer):
+    codigo = serializers.RegexField(r'^\d{6}$', error_messages={'invalid': 'O código tem 6 números.'})
+
+
 class UsuarioSerializer(serializers.ModelSerializer):
     # Campos sem o validador automático de unicidade: normalizamos antes e conferimos à mão
     email = serializers.EmailField()
@@ -99,11 +110,25 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
 
 class EuSerializer(UsuarioSerializer):
-    """O próprio usuário: pode alterar só nome e WhatsApp."""
+    """
+    O próprio usuário: pode alterar só nome e WhatsApp.
+    - O e-mail é o login: só a equipe altera (em Usuários/Clientes).
+    - Trocar o WhatsApp exige a senha atual (o WhatsApp também serve para entrar com código).
+    """
+    email = serializers.EmailField(read_only=True)
+    senha_atual = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
 
     class Meta(UsuarioSerializer.Meta):
-        fields = ['id', 'email', 'nome', 'whatsapp', 'cpf_formatado', 'endereco', 'link_maps', 'perfil', 'last_login']
-        read_only_fields = ['email', 'endereco', 'perfil', 'last_login']
+        fields = ['id', 'email', 'nome', 'whatsapp', 'cpf_formatado', 'endereco', 'link_maps', 'perfil',
+                  'last_login', 'senha_atual']
+        read_only_fields = ['endereco', 'perfil', 'last_login']
+
+    def validate(self, dados):
+        senha = dados.pop('senha_atual', None)
+        if 'whatsapp' in dados and dados['whatsapp'] != self.instance.whatsapp:
+            if not senha or not self.instance.check_password(senha):
+                raise serializers.ValidationError({'senha_atual': 'Informe a senha atual para trocar o WhatsApp.'})
+        return dados
 
 
 class TrocarSenhaSerializer(serializers.Serializer):

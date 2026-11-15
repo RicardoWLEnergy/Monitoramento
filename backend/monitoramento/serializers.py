@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Alerta
+from .models import Alerta, ImportacaoHistorico
 
 
 class AlertaSerializer(serializers.ModelSerializer):
@@ -12,3 +12,16 @@ class AlertaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Alerta
         fields = ['id', 'usina', 'usina_nome', 'inversor_sn', 'tipo', 'tipo_nome', 'mensagem', 'inicio', 'fim', 'aberto']
+
+
+class ImportacaoHistoricoSerializer(serializers.ModelSerializer):
+    """Situação de uma importação de histórico (mostrada em Configurações da usina)."""
+    status_nome = serializers.CharField(source='get_status_display', read_only=True)
+    etapa_nome = serializers.CharField(source='get_etapa_display', read_only=True)
+    solicitado_por_nome = serializers.CharField(source='solicitado_por.nome', read_only=True, default=None)
+
+    class Meta:
+        model = ImportacaoHistorico
+        fields = ['id', 'inicio', 'fim', 'curvas', 'status', 'status_nome', 'etapa', 'etapa_nome',
+                  'passos_feitos', 'passos_total', 'dias_energia', 'dias_curva', 'leituras', 'falhas',
+                  'solicitado_por_nome', 'criado_em', 'iniciado_em', 'concluido_em']

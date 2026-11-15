@@ -179,6 +179,20 @@ class CurvasHuaweiTests(ColetaHuaweiBase):
         self.assertEqual(Leitura.objects.get().data_hora, dez_horas.replace(second=0))
         self.assertEqual(rel.leituras, 1)
 
+    def test_mesmo_inversor_no_bloco_fica_a_amostra_real_e_inversores_somam(self):
+        hoje = timezone.localdate()
+        outro = Inversor.objects.create(usina=self.usina, numero_serie='SN2', id_externo='222', tipo_externo='38')
+        base = datetime(hoje.year, hoje.month, hoje.day, 10, 0, tzinfo=SP)
+        ms = lambda m, s: int(base.replace(minute=m, second=s).timestamp() * 1000)
+        self.api.historico_dispositivos.return_value = [
+            {'devId': 1000000033629201, 'collectTime': ms(28, 40), 'dataItemMap': {'active_power': 2.0}},
+            {'devId': 1000000033629201, 'collectTime': ms(32, 10), 'dataItemMap': {'active_power': 2.4}},
+            {'devId': int(outro.id_externo), 'collectTime': ms(30, 5), 'dataItemMap': {'active_power': 1.0}},
+        ]
+        coleta_huawei.importar_curvas(self.usina, hoje, hoje, api=self.api)
+        # bloco 10:30 = 2,0 (amostra real mais próxima do 1º inversor) + 1,0 (2º inversor) — nunca 2,0 + 2,4 + 1,0
+        self.assertEqual(Leitura.objects.get(data_hora=base.replace(minute=30)).potencia_kw, 3.0)
+
     def test_interface_nao_liberada_avisa_como_resolver(self):
         hoje = timezone.localdate()
         self.api.historico_dispositivos.side_effect = HuaweiErro('getDevHistoryKpi', 401)

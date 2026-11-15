@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -88,3 +89,75 @@ class Alerta(models.Model):
     @property
     def aberto(self) -> bool:
         return self.fim is None
+
+
+class ImportacaoHistorico(models.Model):
+    """
+    Pedido de importação de histórico (botão em Configurações da usina).
+
+    A tela só registra o pedido; quem executa é o coletor (`manage.py coletar`), em pedaços
+    (1 mês de energia ou 1 dia de curva por vez) no tempo livre entre os ciclos de tempo real.
+    O progresso fica salvo a cada pedaço: se o coletor reiniciar, continua de onde parou.
+    """
+
+    class Status(models.TextChoices):
+        FILA = 'fila', 'Na fila'
+        IMPORTANDO = 'importando', 'Importando'
+        CONCLUIDA = 'concluida', 'Concluída'
+        ERRO = 'erro', 'Erro'
+
+    class Etapa(models.TextChoices):
+        ENERGIA = 'energia', 'Energia diária'
+        CURVA = 'curva', 'Curva de 5 min'
+
+    ATIVOS = (Status.FILA, Status.IMPORTANDO)
+    MAX_FALHAS = 20
+    MAX_ERROS_TEMPORARIOS = 5
+
+    usina = models.ForeignKey(Usina, on_delete=models.CASCADE, related_name='importacoes', verbose_name='usina')
+    inicio = models.DateField('de')
+    fim = models.DateField('até')
+    curvas = models.BooleanField('com curva de 5 min', default=True)
+    solicitado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+', verbose_name='solicitado por')
+    criado_em = models.DateTimeField('solicitado em', auto_now_add=True)
+    iniciado_em = models.DateTimeField('iniciado em', null=True, blank=True)
+    concluido_em = models.DateTimeField('concluído em', null=True, blank=True)
+
+    status = models.CharField('status', max_length=12, choices=Status.choices, default=Status.FILA)
+    etapa = models.CharField('etapa', max_length=10, choices=Etapa.choices, default=Etapa.ENERGIA)
+    cursor = models.DateField('próximo dia', null=True, blank=True,
+                              help_text='Dia mais recente ainda não importado na etapa atual (vai do fim ao início).')
+    passos_feitos = models.PositiveIntegerField('passos feitos', default=0)
+    passos_total = models.PositiveIntegerField('passos no total', default=0)
+
+    dias_energia = models.PositiveIntegerField('dias de energia', default=0)
+    dias_curva = models.PositiveIntegerField('dias de curva', default=0)
+    leituras = models.PositiveIntegerField('leituras', default=0)
+    falhas = models.JSONField('falhas', default=list, blank=True)
+    # Erro passageiro (sem conexão, login recusado): pausa e tenta de novo; após MAX_ERROS_TEMPORARIOS, desiste
+    erros_temporarios = models.PositiveSmallIntegerField('erros passageiros seguidos', default=0)
+    tentar_apos = models.DateTimeField('tentar de novo após', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'importação de histórico'
+        verbose_name_plural = 'importações de histórico'
+        ordering = ['-criado_em']
+        constraints = [
+            # No máximo uma importação na fila/em andamento por usina
+            models.UniqueConstraint(fields=['usina'], condition=models.Q(status__in=['fila', 'importando']),
+                                    name='uma_importacao_ativa_por_usina'),
+        ]
+
+    def __str__(self):
+        return f'{self.usina} · {self.inicio:%d/%m/%Y}–{self.fim:%d/%m/%Y} · {self.get_status_display()}'
+
+    @property
+    def ativa(self) -> bool:
+        return self.status in self.ATIVOS
+
+    def anotar_falhas(self, falhas: list[str]) -> None:
+        """Guarda até MAX_FALHAS mensagens, sem repetir."""
+        for f in falhas:
+            if f not in self.falhas and len(self.falhas) < self.MAX_FALHAS:
+                self.falhas.append(f)

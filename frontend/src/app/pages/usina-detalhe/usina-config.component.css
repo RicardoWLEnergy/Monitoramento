@@ -19,6 +19,15 @@ h3 { font-size: 16px; font-weight: 700; }
 .rodape-secao { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
 .rodape-secao .sub { margin-right: auto; }
 
+/* Importação em segundo plano */
+.importacao {
+  display: grid; gap: 6px; padding: 12px 14px; font-size: 13px;
+  border: 1px solid var(--line); border-left: 3px solid var(--wl-orange); border-radius: var(--radius-sm);
+}
+.importacao.erro { border-left-color: var(--danger-txt); }
+.barra { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.barra div { height: 100%; background: var(--wl-orange); transition: width 200ms var(--ease-out); }
+
 /* Clientes */
 .cliente {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

@@ -5,21 +5,28 @@ Coleta automática (usada pelo comando `python manage.py coletar`).
   de todas as usinas ATIVAS (FoxESS e Huawei).
 - rotina_diaria(): 1x por dia — energia diária dos últimos dias (corrige o dia anterior),
   curva oficial de ontem e manutenção das partições das leituras.
+- processar_fila(): importações de histórico pedidas na tela, em pedaços, só no tempo livre
+  entre os ciclos de tempo real (o tempo real tem prioridade).
 
 Cada plataforma roda isolada: erro em uma não interrompe a outra.
 Os clientes das APIs são reaproveitados entre os ciclos (a Huawei limita logins).
 """
 import logging
+import time
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, timedelta
 
+import requests
 from django.db import DEFAULT_DB_ALIAS, connections
+from django.db.models import Q
 from django.utils import timezone
 
+from monitoramento.models import ImportacaoHistorico
 from monitoramento.particoes import criar_particoes, remover_particoes_antigas
 from usinas.models import Plataforma, Usina
 
 from . import coleta, coleta_huawei
+from .huawei import HuaweiLoginErro
 
 log = logging.getLogger('coletor')
 
@@ -119,6 +126,141 @@ def rotina_diaria(clientes: Clientes, dias_energia: int = 3) -> Resumo:
             log.exception('Rotina diária falhou para %s', usina.nome)
             resumo.erros.append(f'{usina.nome}: {erro}')
     return resumo
+
+
+# ----------------------------------------------------------------------------
+# Fila de importações de histórico (pedidas pela tela)
+# ----------------------------------------------------------------------------
+# Tamanho do pedaço de curva: FoxESS busca 1 dia por chamada; Huawei, até 3 dias por chamada
+DIAS_POR_PASSO_CURVA = {Plataforma.FOXESS: 1, Plataforma.HUAWEI: 3}
+# Erros passageiros: a importação pausa e tenta de novo depois (não avança o cursor)
+ERROS_PASSAGEIROS = (requests.RequestException, HuaweiLoginErro)
+PAUSA_APOS_ERRO = timedelta(minutes=10)
+AVISO_CURVA_HUAWEI = ('Curva de 5 min não liberada na conta Northbound; '
+                      'a curva destes dias fica só com as leituras do tempo real.')
+Imp = ImportacaoHistorico
+
+
+def processar_fila(clientes: Clientes, prazo: float, relogio=time.monotonic) -> int:
+    """
+    Executa pedaços das importações pendentes (a mais antiga primeiro) até o `prazo`
+    (valor de time.monotonic() do próximo ciclo de tempo real). Devolve quantos pedaços fez.
+    Cada pedaço é curto (1 mês de energia ou 1 dia de curva), então o tempo real nunca espera muito.
+    """
+    feitos = 0
+    while relogio() < prazo:
+        imp = (Imp.objects.filter(status__in=Imp.ATIVOS)
+               .filter(Q(tentar_apos__isnull=True) | Q(tentar_apos__lte=timezone.now()))
+               .select_related('usina').order_by('criado_em').first())
+        if imp is None:
+            break
+        executar_passo(imp, clientes)
+        feitos += 1
+    return feitos
+
+
+def _periodo_curva(imp: ImportacaoHistorico) -> tuple[date, date] | None:
+    if not imp.curvas:
+        return None
+    inicio, fim = max(imp.inicio, coleta.limite_curvas()), min(imp.fim, timezone.localdate())
+    return (inicio, fim) if inicio <= fim else None
+
+
+def _passos_curva(imp: ImportacaoHistorico) -> int:
+    periodo = _periodo_curva(imp)
+    if periodo is None:
+        return 0
+    tamanho = DIAS_POR_PASSO_CURVA[imp.usina.plataforma]
+    return -(-((periodo[1] - periodo[0]).days + 1) // tamanho)   # divisão arredondando para cima
+
+
+def _iniciar(imp: ImportacaoHistorico) -> None:
+    imp.status, imp.iniciado_em = Imp.Status.IMPORTANDO, timezone.now()
+    imp.etapa, imp.cursor = Imp.Etapa.ENERGIA, min(imp.fim, timezone.localdate())
+    imp.passos_feitos = 0
+    imp.passos_total = len(coleta._meses_do_periodo(imp.inicio, imp.cursor)) + _passos_curva(imp)
+    log.info('Importação de histórico iniciada: %s (%s a %s).', imp.usina.nome,
+             f'{imp.inicio:%d/%m/%Y}', f'{imp.fim:%d/%m/%Y}')
+
+
+def _ir_para_curva_ou_concluir(imp: ImportacaoHistorico, clientes: Clientes) -> None:
+    periodo = _periodo_curva(imp)
+    if imp.etapa == Imp.Etapa.ENERGIA and periodo:
+        if imp.usina.plataforma == Plataforma.HUAWEI and clientes.curva_huawei_bloqueada:
+            imp.anotar_falhas([AVISO_CURVA_HUAWEI])
+        else:
+            imp.etapa, imp.cursor = Imp.Etapa.CURVA, periodo[1]
+            return
+    imp.status, imp.concluido_em, imp.cursor = Imp.Status.CONCLUIDA, timezone.now(), None
+    imp.passos_feitos = imp.passos_total
+    log.info('Importação de histórico concluída: %s (%s dia(s) de energia, %s de curva).',
+             imp.usina.nome, imp.dias_energia, imp.dias_curva)
+
+
+def executar_passo(imp: ImportacaoHistorico, clientes: Clientes) -> None:
+    """Um pedaço da importação: 1 mês de energia diária ou 1 dia (FoxESS) / 3 dias (Huawei) de curva."""
+    usina = imp.usina
+    try:
+        if not usina.ativa:
+            raise ValueError('A usina foi apagada.')
+        if usina.plataforma == Plataforma.FOXESS:
+            api, modulo = clientes.foxess(), coleta
+        elif usina.plataforma == Plataforma.HUAWEI:
+            api, modulo = clientes.huawei(), coleta_huawei
+        else:
+            raise ValueError('Esta plataforma não tem importação de histórico.')
+
+        if imp.status == Imp.Status.FILA:
+            _iniciar(imp)
+
+        if imp.etapa == Imp.Etapa.ENERGIA:
+            ate = imp.cursor
+            de = max(imp.inicio, ate.replace(day=1))                    # 1 mês por vez, do mais recente ao mais antigo
+            r = modulo.importar_geracao_diaria(usina, de, ate, api=api)
+            imp.dias_energia += r.dias
+            imp.anotar_falhas(r.falhas)
+            imp.cursor = de - timedelta(days=1)
+            imp.passos_feitos += 1
+            if imp.cursor < imp.inicio:
+                _ir_para_curva_ou_concluir(imp, clientes)
+        else:
+            periodo = _periodo_curva(imp)
+            if periodo is None or imp.cursor is None:   # período saiu da retenção: nada mais a importar
+                _ir_para_curva_ou_concluir(imp, clientes)
+                imp.save()
+                return
+            inicio_curva = periodo[0]
+            ate = imp.cursor
+            de = max(inicio_curva, ate - timedelta(days=DIAS_POR_PASSO_CURVA[usina.plataforma] - 1))
+            r = modulo.importar_curvas(usina, de, ate, api=api)
+            imp.dias_curva += r.dias
+            imp.leituras += r.leituras
+            imp.cursor = de - timedelta(days=1)
+            imp.passos_feitos += 1
+            if any('não liberada' in f for f in r.falhas):
+                clientes.curva_huawei_bloqueada = True                  # não insiste nos dias restantes
+                imp.anotar_falhas([AVISO_CURVA_HUAWEI])
+                imp.cursor = inicio_curva - timedelta(days=1)
+            else:
+                imp.anotar_falhas(r.falhas)
+            if imp.cursor < inicio_curva:
+                _ir_para_curva_ou_concluir(imp, clientes)
+    except ERROS_PASSAGEIROS as erro:
+        imp.erros_temporarios += 1
+        if imp.erros_temporarios >= Imp.MAX_ERROS_TEMPORARIOS:
+            log.error('Importação de histórico desistiu após %s erros seguidos: %s', imp.erros_temporarios, usina.nome)
+            imp.anotar_falhas([f'Plataforma indisponível: {erro}'])
+            imp.status, imp.concluido_em = Imp.Status.ERRO, timezone.now()
+        else:
+            log.warning('Importação de histórico pausada (%s): %s — tenta de novo em 10 min.', usina.nome, erro)
+            imp.tentar_apos = timezone.now() + PAUSA_APOS_ERRO
+    except Exception as erro:   # noqa: BLE001 — erro inesperado encerra só esta importação, nunca o coletor
+        log.exception('Importação de histórico falhou: %s', usina.nome)
+        imp.anotar_falhas([str(erro)])
+        imp.status, imp.concluido_em = Imp.Status.ERRO, timezone.now()
+    else:
+        imp.erros_temporarios, imp.tentar_apos = 0, None
+    imp.save()
 
 
 # ----------------------------------------------------------------------------

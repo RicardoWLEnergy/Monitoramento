@@ -1,20 +1,18 @@
-from datetime import date
-
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from integracoes.coleta import cobertura, importar_periodo
-from integracoes.foxess import FoxESSErro
-from integracoes.huawei import HuaweiErro
-from monitoramento.consultas import anotar_usinas, curva_do_dia, geracao_mensal
+from integracoes.coleta import cobertura
+from monitoramento.consultas import anotar_usinas, curva_do_dia, geracao_mensal, geracao_por_dia, ler_data, ler_periodo
+from monitoramento.models import ImportacaoHistorico
+from monitoramento.serializers import ImportacaoHistoricoSerializer
 from usuarios.models import Usuario
 from usuarios.permissoes import ADMIN, EhAdmin, EhEquipe, perfil_de, usinas_visiveis
 
-from .models import GeracaoEsperada, Status
+from .models import GeracaoEsperada, Plataforma, Status, Usina
 from .serializers import (
     CAMPOS_ALERTAS, GeracaoEsperadaSerializer, ImportarHistoricoSerializer, InversorSerializer,
     UsinaDetalheSerializer, UsinaEdicaoSerializer, UsinaListaSerializer, VinculoClientesSerializer,
@@ -87,16 +85,30 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
     def curva(self, request, pk=None):
         """?data=AAAA-MM-DD (padrão: hoje)."""
         try:
-            dia = date.fromisoformat(request.query_params.get('data') or timezone.localdate().isoformat())
-        except ValueError:
-            raise serializers.ValidationError({'data': 'Use o formato AAAA-MM-DD.'})
+            dia = ler_data(request.query_params.get('data'), timezone.localdate())
+        except ValueError as erro:
+            raise serializers.ValidationError({'data': str(erro)})
         usina = self.get_object()
         return Response({'data': dia.isoformat(), 'fuso': usina.fuso_horario, 'pontos': curva_do_dia(usina, dia)})
+
+    @action(detail=True, url_path='geracao-diaria')
+    def geracao_diaria(self, request, pk=None):
+        """?inicio=AAAA-MM-DD&fim=AAAA-MM-DD (padrão: últimos 30 dias; até 366 dias)."""
+        try:
+            inicio, fim = ler_periodo(request.query_params)
+        except ValueError as erro:
+            raise serializers.ValidationError({'detail': str(erro)})
+        usina = self.get_object()
+        dias = geracao_por_dia(Usina.objects.filter(pk=usina.pk), inicio, fim)
+        return Response({'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'dias': dias})
 
     @action(detail=True, url_path='geracao-mensal')
     def geracao_mensal(self, request, pk=None):
         """?meses=12 (1 a 36)."""
-        meses = min(max(int(request.query_params.get('meses') or 12), 1), 36)
+        try:
+            meses = min(max(int(request.query_params.get('meses') or 12), 1), 36)
+        except ValueError:
+            meses = 12
         usina = self.get_object()
         return Response(geracao_mensal(usinas_visiveis(request.user).filter(pk=usina.pk), meses))
 
@@ -129,17 +141,29 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
     @action(detail=True, methods=['get', 'post'])
     def historico(self, request, pk=None):
         """
-        GET  o que já existe no banco (dias de energia e de curva).
-        POST {"inicio": "2026-10-01", "fim": "2026-11-09", "curvas": true} importa da plataforma.
-        Leva ~1 s por inversor por dia de curva (limite da FoxESS) — a resposta só volta no fim.
+        GET  o que já existe no banco (dias de energia e de curva) + a importação mais recente.
+        POST {"inicio": "2026-10-01", "fim": "2026-11-09", "curvas": true} coloca a importação na fila.
+        Quem importa é o coletor, no tempo livre entre os ciclos de tempo real: a resposta volta na hora
+        e a tela acompanha o progresso pelo GET.
         """
         usina = self.get_object()
         if request.method == 'POST':
             dados = ImportarHistoricoSerializer(data=request.data)
             dados.is_valid(raise_exception=True)
+            if usina.plataforma not in (Plataforma.FOXESS, Plataforma.HUAWEI):
+                return Response({'detail': 'Esta plataforma não tem importação de histórico.'}, status=400)
+            if usina.importacoes.filter(status__in=ImportacaoHistorico.ATIVOS).exists():
+                return Response({'detail': 'Já existe uma importação em andamento para esta usina.'}, status=409)
             try:
-                resultado = importar_periodo(usina, **dados.validated_data)
-            except (FoxESSErro, HuaweiErro, ValueError) as erro:
-                return Response({'detail': str(erro)}, status=400)
-            return Response({**resultado, 'cobertura': cobertura(usina)})
-        return Response(cobertura(usina))
+                with transaction.atomic():
+                    ImportacaoHistorico.objects.create(usina=usina, solicitado_por=request.user,
+                                                       **dados.validated_data)
+            except IntegrityError:   # dois cliques ao mesmo tempo
+                return Response({'detail': 'Já existe uma importação em andamento para esta usina.'}, status=409)
+            return Response(self._situacao_historico(usina), status=202)
+        return Response(self._situacao_historico(usina))
+
+    @staticmethod
+    def _situacao_historico(usina) -> dict:
+        ultima = usina.importacoes.select_related('solicitado_por').first()
+        return {**cobertura(usina), 'importacao': ImportacaoHistoricoSerializer(ultima).data if ultima else None}

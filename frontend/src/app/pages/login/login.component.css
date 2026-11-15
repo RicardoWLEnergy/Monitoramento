@@ -8,6 +8,8 @@
   --muted: var(--wl-gray-500);
   --input-bg: #000000;
   --danger-bg: rgba(226, 59, 46, 0.16);
+  --ok: #6fdd8b;
+  --ok-bg: rgba(52, 199, 108, 0.16);
   display: block;
 }
 
@@ -32,3 +34,15 @@
 .entrar { width: 100%; padding: 11px 18px; margin-top: 4px; }
 .entrar .spinner { border-color: rgba(0, 0, 0, 0.25); border-top-color: var(--wl-black); width: 14px; height: 14px; }
 
+.alerta.ok { border-left-color: var(--ok); background: var(--ok-bg); }
+.codigo { letter-spacing: 0.3em; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+
+/* Trocar entre senha e código */
+.opcoes { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.opcoes .link:only-child { margin-left: auto; margin-right: auto; }
+.link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--wl-orange); font: 500 13px var(--font-sans);
+}
+.link:hover { color: var(--accent-hover); }
+.link:disabled { color: var(--muted); cursor: default; }

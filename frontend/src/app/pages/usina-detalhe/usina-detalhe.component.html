@@ -70,7 +70,7 @@
         <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
         <strong>{{ u.geracao_mes_kwh | number: '1.0-0' }} kWh</strong>
         <small>
-          @if (resumo()!.desempenhoMes !== null) { {{ resumo()!.desempenhoMes | number: '1.0-0' }}% do esperado }
+          @if (resumo()!.desempenhoMes !== null) { {{ resumo()!.desempenhoMes | number: '1.0-0' }}% do esperado até hoje }
           @else { sem geração esperada cadastrada }
         </small>
       </div>
@@ -81,19 +81,69 @@
       </div>
     </section>
 
-    <!-- ---------- Curva do dia ---------- -->
+    <!-- ---------- Curva do dia / geração do período ---------- -->
     <section class="card">
       <div class="card-topo">
         <div>
-          <h3>Potência ao longo do dia</h3>
+          @if (modo() === 'dia') {
+            <h3>Potência ao longo do dia</h3>
+          } @else {
+            <h3>Geração por dia</h3>
+            <span class="sub">Clique num dia para ver a curva de potência</span>
+          }
         </div>
-        <input class="input data" type="date" [max]="hoje" [value]="dataCurva()"
-               (change)="mudarDia($any($event.target).value)" aria-label="Dia da curva">
+        <div class="controles">
+          <div class="chips">
+            <button class="chip" type="button" [class.ativo]="modo() === 'dia'" (click)="mudarModo('dia')">Dia</button>
+            <button class="chip" type="button" [class.ativo]="modo() === 'periodo'" (click)="mudarModo('periodo')">Período</button>
+          </div>
+          @if (modo() === 'dia') {
+            <input class="input data" type="date" [max]="hoje" [value]="dataCurva()"
+                   (change)="mudarDia($any($event.target).value)" aria-label="Dia da curva">
+          } @else {
+            <span class="datas">
+              <input class="input data" type="date" [max]="fimPeriodo()" [value]="inicioPeriodo()"
+                     (change)="mudarPeriodo($any($event.target).value, fimPeriodo())" aria-label="Início do período">
+              <span class="sub">até</span>
+              <input class="input data" type="date" [min]="inicioPeriodo()" [max]="hoje" [value]="fimPeriodo()"
+                     (change)="mudarPeriodo(inicioPeriodo(), $any($event.target).value)" aria-label="Fim do período">
+            </span>
+          }
+        </div>
       </div>
-      @if (curva()?.pontos?.length) {
-        <div class="grafico" echarts [options]="opcoesCurva()"></div>
+
+      @if (modo() === 'dia') {
+        @if (curva()?.pontos?.length) {
+          <div class="grafico" echarts [options]="opcoesCurva()"></div>
+        } @else {
+          <div class="vazio">Sem leituras neste dia.</div>
+        }
       } @else {
-        <div class="vazio">Sem leituras neste dia.</div>
+        <div class="chips">
+          @for (a of atalhos; track a.rotulo) {
+            <button class="chip" type="button" [class.ativo]="inicioPeriodo() === a.inicio && fimPeriodo() === a.fim"
+                    (click)="mudarPeriodo(a.inicio, a.fim)">{{ a.rotulo }}</button>
+          }
+        </div>
+        @let r = resumoPeriodo();
+        @if (erroPeriodo()) {
+          <div class="alerta erro">{{ erroPeriodo() }}</div>
+        } @else if (r) {
+          <dl class="resumo-periodo">
+            <div><dt class="label">Total</dt><dd>{{ r.total | number: '1.0-0' }} kWh</dd></div>
+            <div><dt class="label">Média por dia</dt><dd>{{ r.media | number: '1.1-1' }} kWh</dd></div>
+            @if (r.esperado !== null) {
+              <div><dt class="label">Esperado</dt><dd>{{ r.esperado | number: '1.0-0' }} kWh</dd></div>
+              <div><dt class="label">Gerado × esperado</dt><dd>{{ r.desempenhoPct | number: '1.0-0' }}%</dd></div>
+            }
+            <div><dt class="label">Melhor dia</dt><dd>{{ r.melhorDia }} · {{ r.melhorKwh | number: '1.0-0' }} kWh</dd></div>
+          </dl>
+          <div class="grafico" echarts [options]="opcoesPeriodo()" (chartClick)="abrirDia($any($event).dataIndex)"></div>
+        } @else if (periodo()) {
+          <div class="vazio">Sem geração registrada neste período.</div>
+        } @else {
+          <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
+        }
       }
     </section>
 
@@ -125,7 +175,10 @@
                   <td>{{ m.rotulo }} @if (m.parcial) { <span class="tag neutral">em andamento</span> }</td>
                   <td class="dir">{{ m.gerado_kwh | number: '1.0-0' }} kWh</td>
                   <td class="dir">{{ m.esperado_kwh ? (m.esperado_kwh | number: '1.0-0') + ' kWh' : '—' }}</td>
-                  <td class="dir">{{ pct !== null ? (pct | number: '1.0-0') + '%' : '—' }}</td>
+                  <td class="dir">
+                    {{ pct !== null ? (pct | number: '1.0-0') + '%' : '—' }}
+                    @if (m.parcial && pct !== null) { <div class="sub">do esperado até hoje</div> }
+                  </td>
                 </tr>
               }
             </tbody>

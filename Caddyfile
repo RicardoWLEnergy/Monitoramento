@@ -7,9 +7,10 @@
 	# Compacta as respostas (carrega mais rápido)
 	encode zstd gzip
 
-	# API, painel /admin e seus arquivos → Django (Gunicorn)
-	# (/admin sem barra também: o Django completa para /admin/)
-	@django path /api/* /admin /admin/* /static/*
+	# API e arquivos do Django → Gunicorn.
+	# O painel /admin NÃO passa por aqui (fechado para a internet): acesso só pelo servidor,
+	# com túnel SSH para 127.0.0.1:8001 (ver README → Produção → Painel /admin)
+	@django path /api/* /static/*
 	handle @django {
 		reverse_proxy backend:8000
 	}
@@ -23,9 +24,15 @@
 
 	# Cabeçalhos de segurança
 	header {
+		# Navegador só acessa por HTTPS (1 ano). Com certificado próprio (TLS_MODO=internal) é ignorado.
+		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Política de conteúdo em modo "só observa": não bloqueia nada, só avisa no console do navegador.
+		# Depois de alguns dias sem avisos, trocar por "Content-Security-Policy" para passar a valer.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'sha256-edDWMAAT81a8TAWdtrRTqbF7i1tMbszTD8AS/XmrISA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 		-Server
 	}
 }

@@ -1,5 +1,5 @@
-import { Component, OnChanges, inject, input, output, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { Component, DestroyRef, OnChanges, computed, inject, input, output, signal } from '@angular/core';
+import { DatePipe, DecimalPipe, I18nPluralPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -7,7 +7,10 @@ import { Download, ExternalLink, LucideAngularModule, Trash2, X } from 'lucide-a
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { plural } from '../../services/formato';
-import { CoberturaHistorico, ConfigAlertas, DadosUsina, UsinaDetalhe, UsinasService } from '../../services/usinas.service';
+import { diasAtras, isoLocal } from '../../services/periodo';
+import {
+  CoberturaHistorico, ConfigAlertas, DadosUsina, ImportacaoHistorico, UsinaDetalhe, UsinasService,
+} from '../../services/usinas.service';
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -19,20 +22,22 @@ const FUSOS = ['America/Sao_Paulo', 'America/Bahia', 'America/Fortaleza', 'Ameri
   'America/Rio_Branco', 'America/Noronha'];
 interface Aviso { tipo: 'ok' | 'erro'; texto: string; }
 
-const isoLocal = (d: Date) => d.toLocaleDateString('sv-SE');   // AAAA-MM-DD no fuso local
-const diasAtras = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return isoLocal(d); };
+const emAndamento = (i: ImportacaoHistorico | null | undefined) => i?.status === 'fila' || i?.status === 'importando';
+/** De quanto em quanto tempo a tela pergunta o progresso da importação. */
+const INTERVALO_PROGRESSO_MS = 5000;
 
 /**
  * Aba "Configurações" (Admin e Colaborador).
  * - Dados da usina: vêm da plataforma no 1º cadastro; Admin e Colaborador corrigem
- * - Histórico de geração: importar dias anteriores da plataforma (Admin e Colaborador)
+ * - Histórico de geração: pede a importação de dias anteriores; o servidor importa em segundo plano
+ *   (pode fechar a página) e a tela mostra o progresso enquanto estiver aberta (Admin e Colaborador)
  * - Clientes vinculados: Admin e Colaborador
  * - Geração esperada e alertas: só o Admin altera
  * - Apagar usina: só o Admin (desativa; o histórico fica e volta se a SN for cadastrada de novo)
  */
 @Component({
   selector: 'app-usina-config',
-  imports: [DecimalPipe, FormsModule, RouterLink, LucideAngularModule],
+  imports: [DatePipe, DecimalPipe, I18nPluralPipe, FormsModule, RouterLink, LucideAngularModule],
   templateUrl: './usina-config.component.html',
   styleUrl: './usina-config.component.css',
 })
@@ -66,7 +71,19 @@ export class UsinaConfigComponent implements OnChanges {
     { rotulo: '90 dias', dias: 90 }, { rotulo: '12 meses', dias: 365 },
   ];
 
+  readonly importacao = computed(() => this.cobertura()?.importacao ?? null);
+  readonly importando = computed(() => emAndamento(this.importacao()));
+  readonly progresso = computed(() => {
+    const i = this.importacao();
+    return i && i.passos_total ? Math.round((100 * i.passos_feitos) / i.passos_total) : 0;
+  });
+  private acompanhamento: ReturnType<typeof setInterval> | null = null;
+
   private idCarregado = 0;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.pararAcompanhamento());
+  }
 
   ngOnChanges(): void {
     const u = this.usina();
@@ -82,7 +99,9 @@ export class UsinaConfigComponent implements OnChanges {
     };
     if (u.id !== this.idCarregado) {
       this.idCarregado = u.id;
-      this.api.coberturaHistorico(u.id).subscribe({ next: c => this.cobertura.set(c), error: () => {} });
+      this.pararAcompanhamento();
+      this.cobertura.set(null);
+      this.atualizarCobertura();
       this.api.geracaoEsperada(u.id).subscribe(lista => {
         this.esperado = Array(12).fill(null);
         for (const item of lista) this.esperado[item.mes - 1] = item.energia_kwh;
@@ -114,20 +133,43 @@ export class UsinaConfigComponent implements OnChanges {
     this.salvando.set('historico');
     this.aviso.update(a => ({ ...a, historico: null }));
     this.api.importarHistorico(this.usina().id, inicio, fim, curvas).subscribe({
-      next: r => {
+      next: c => {
         this.salvando.set(null);
-        this.cobertura.set(r.cobertura);
-        let texto = `Importado: ${plural(r.dias_energia, 'dia', 'dias')} de energia`;
-        if (curvas) texto += ` e ${plural(r.dias_curva, 'dia', 'dias')} de curva`;
-        texto += r.falhas.length ? `. ${plural(r.falhas.length, 'falha', 'falhas')}: ${r.falhas.slice(0, 2).join('; ')}` : '.';
-        this.aviso.update(a => ({ ...a, historico: { tipo: r.falhas.length ? 'erro' : 'ok', texto } }));
-        this.importado.emit();
+        this.receberCobertura(c);
       },
       error: e => {
         this.salvando.set(null);
         this.aviso.update(a => ({ ...a, historico: { tipo: 'erro', texto: mensagemDeErro(e, 'Não foi possível importar.') } }));
       },
     });
+  }
+
+  /** Resumo de uma importação concluída. */
+  resumoImportacao(i: ImportacaoHistorico): string {
+    let texto = `${plural(i.dias_energia, 'dia', 'dias')} de energia`;
+    if (i.curvas) texto += ` e ${plural(i.dias_curva, 'dia', 'dias')} de curva`;
+    return texto;
+  }
+
+  private atualizarCobertura(): void {
+    this.api.coberturaHistorico(this.usina().id).subscribe({ next: c => this.receberCobertura(c), error: () => {} });
+  }
+
+  /** Guarda a situação; enquanto houver importação em andamento, pergunta o progresso a cada 5 s. */
+  private receberCobertura(c: CoberturaHistorico): void {
+    const antes = this.cobertura()?.importacao;
+    this.cobertura.set(c);
+    if (emAndamento(c.importacao)) {
+      this.acompanhamento ??= setInterval(() => this.atualizarCobertura(), INTERVALO_PROGRESSO_MS);
+      return;
+    }
+    this.pararAcompanhamento();
+    if (emAndamento(antes) && c.importacao?.id === antes?.id) this.importado.emit();   // terminou: recarrega os gráficos
+  }
+
+  private pararAcompanhamento(): void {
+    if (this.acompanhamento) clearInterval(this.acompanhamento);
+    this.acompanhamento = null;
   }
 
   // ---------- Demais seções ----------

@@ -10,14 +10,14 @@ import {
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { GraficosService, echarts } from '../../services/graficos.service';
+import { atalhosPeriodo, hojeIso, resumoPeriodo } from '../../services/periodo';
 import {
-  CLASSE_STATUS, Curva, Inversor, MesGeracao, ROTULO_STATUS, UsinaDetalhe, UsinasService,
+  CLASSE_STATUS, Curva, GeracaoPeriodo, Inversor, MesGeracao, ROTULO_STATUS, UsinaDetalhe, UsinasService,
 } from '../../services/usinas.service';
 import { UsinaConfigComponent } from './usina-config.component';
 
 type Aba = 'geracao' | 'configuracoes';
-
-const hojeIso = () => new Date().toLocaleDateString('sv-SE');   // AAAA-MM-DD no fuso local
+type Modo = 'dia' | 'periodo';
 
 /** Detalhe da usina: aba Geração (todos) e aba Configurações (Admin/Colaborador). */
 @Component({
@@ -52,6 +52,14 @@ export class UsinaDetalheComponent {
   readonly dataCurva = signal(hojeIso());
   readonly hoje = hojeIso();
 
+  // Gráfico de cima: "Dia" (curva de potência) ou "Período" (energia de cada dia)
+  readonly modo = signal<Modo>('dia');
+  readonly atalhos = atalhosPeriodo();
+  readonly inicioPeriodo = signal(this.atalhos[1].inicio);
+  readonly fimPeriodo = signal(this.atalhos[1].fim);
+  readonly periodo = signal<GeracaoPeriodo | null>(null);
+  readonly erroPeriodo = signal<string | null>(null);
+
   readonly carregando = signal(true);
   readonly erro = signal<string | null>(null);
   readonly historicoComoTabela = signal(false);
@@ -65,11 +73,15 @@ export class UsinaDetalheComponent {
     return {
       usoPct: u.potencia_kwp ? (u.potencia_atual_kw / u.potencia_kwp) * 100 : 0,
       produtividade: u.potencia_kwp ? u.geracao_hoje_kwh / u.potencia_kwp : 0,
-      desempenhoMes: u.esperado_mes_kwh ? (u.geracao_mes_kwh / u.esperado_mes_kwh) * 100 : null,
+      // Gerado no mês × esperado ATÉ HOJE (proporcional aos dias passados), não o mês inteiro
+      desempenhoMes: u.esperado_ate_hoje_kwh ? (u.geracao_mes_kwh / u.esperado_ate_hoje_kwh) * 100 : null,
       picoKw: Math.max(0, ...pontos.map(p => p.kw)),
     };
   });
   readonly temEsperado = computed(() => this.historico().some(m => m.esperado_kwh > 0));
+
+  readonly resumoPeriodo = computed(() => resumoPeriodo(this.periodo()?.dias ?? []));
+  readonly opcoesPeriodo = computed(() => this.graficos.geracaoDiaria(this.periodo()?.dias ?? [], this.hoje));
 
   readonly opcoesCurva = computed(() => this.graficos.curvaPotencia(this.curva()?.pontos ?? []));
   readonly opcoesHistorico = computed(() => this.graficos.geracaoMensal(this.historico()));
@@ -102,6 +114,7 @@ export class UsinaDetalheComponent {
       },
     });
     this.carregarCurva();
+    if (this.modo() === 'periodo') this.carregarPeriodo();
   }
 
   carregarCurva(): void {
@@ -117,6 +130,37 @@ export class UsinaDetalheComponent {
     this.carregarCurva();
   }
 
+  mudarModo(modo: Modo): void {
+    this.modo.set(modo);
+    if (modo === 'periodo' && !this.periodo()) this.carregarPeriodo();
+  }
+
+  mudarPeriodo(inicio: string, fim: string): void {
+    if (!inicio || !fim) return;
+    this.inicioPeriodo.set(inicio);
+    this.fimPeriodo.set(fim);
+    this.carregarPeriodo();
+  }
+
+  carregarPeriodo(): void {
+    this.erroPeriodo.set(null);
+    this.api.geracaoDiaria(this.id, this.inicioPeriodo(), this.fimPeriodo()).subscribe({
+      next: p => this.periodo.set(p),
+      error: e => {
+        this.periodo.set(null);
+        this.erroPeriodo.set(mensagemDeErro(e, 'Não foi possível carregar o período.'));
+      },
+    });
+  }
+
+  /** Clique numa barra do período: abre a curva de potência daquele dia. */
+  abrirDia(indice: number | undefined): void {
+    const dia = indice === undefined ? null : this.periodo()?.dias[indice];
+    if (!dia) return;
+    this.modo.set('dia');
+    this.mudarDia(dia.data);
+  }
+
   irParaAba(aba: Aba): void {
     this.router.navigate([], {
       relativeTo: this.rota, queryParams: { aba: aba === 'geracao' ? null : aba }, replaceUrl: true,
@@ -130,7 +174,7 @@ export class UsinaDetalheComponent {
   }
 
   desempenhoMes(m: MesGeracao): number | null {
-    return m.esperado_kwh > 0 ? (m.gerado_kwh / m.esperado_kwh) * 100 : null;
+    return m.esperado_ate_hoje_kwh > 0 ? (m.gerado_kwh / m.esperado_ate_hoje_kwh) * 100 : null;
   }
 
   dataHora(iso: string | null): string {

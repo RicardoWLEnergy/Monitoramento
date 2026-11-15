@@ -1,6 +1,9 @@
 import re
+import secrets
+from datetime import timedelta
 from urllib.parse import quote_plus
 
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -136,3 +139,59 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
         self.whatsapp = normalizar_whatsapp(self.whatsapp)
         self.cpf = normalizar_cpf(self.cpf)
         super().save(*args, **kwargs)
+
+
+def mascarar_whatsapp(numero: str | None) -> str:
+    """"+5561999990142" -> "(61) * ****-0142" (mostra só o DDD e o final, para a pessoa reconhecer o número)."""
+    digitos = re.sub(r'\D', '', numero or '')
+    if digitos.startswith('55') and len(digitos) in (12, 13):
+        local = digitos[4:]
+        return f'({digitos[2:4]}) {"* " if len(local) == 9 else ""}****-{local[-4:]}'
+    return f'****-{digitos[-4:]}'
+
+
+class CodigoAcesso(models.Model):
+    """
+    Código de 6 números enviado pelo WhatsApp para entrar sem senha.
+    Guarda só o hash do código (como as senhas): quem lê o banco não vê o código.
+    Vale 5 minutos, uma única vez, e é bloqueado após 5 tentativas erradas.
+    Só o código mais recente de cada usuário vale (pedir outro invalida o anterior).
+    """
+
+    VALIDADE = timedelta(minutes=5)
+    MAX_TENTATIVAS = 5
+    INTERVALO_REENVIO = timedelta(seconds=60)
+    MAX_POR_HORA = 5
+    MAX_POR_DIA = 10
+
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='codigos_acesso', verbose_name='usuário')
+    codigo_hash = models.CharField('código (hash)', max_length=128)
+    criado_em = models.DateTimeField('enviado em', default=timezone.now)
+    expira_em = models.DateTimeField('vale até')
+    tentativas = models.PositiveSmallIntegerField('tentativas erradas', default=0)
+    usado_em = models.DateTimeField('usado em', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'código de acesso'
+        verbose_name_plural = 'códigos de acesso'
+        ordering = ['-criado_em']
+        indexes = [models.Index(fields=['usuario', '-criado_em'], name='codigo_usuario_recente')]
+
+    def __str__(self):
+        return f'{self.usuario} · {self.criado_em:%d/%m/%Y %H:%M}'
+
+    @classmethod
+    def gerar(cls, usuario: Usuario) -> tuple['CodigoAcesso', str]:
+        """Cria um código novo e devolve (registro, código em texto) — o texto só existe aqui, para o envio."""
+        codigo = f'{secrets.randbelow(1_000_000):06d}'
+        agora = timezone.now()
+        registro = cls.objects.create(usuario=usuario, codigo_hash=make_password(codigo),
+                                      criado_em=agora, expira_em=agora + cls.VALIDADE)
+        return registro, codigo
+
+    @property
+    def valido(self) -> bool:
+        return self.usado_em is None and self.tentativas < self.MAX_TENTATIVAS and self.expira_em > timezone.now()
+
+    def confere(self, codigo: str) -> bool:
+        return check_password(codigo, self.codigo_hash)

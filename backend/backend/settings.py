@@ -19,6 +19,10 @@ environ.Env.read_env(BASE_DIR / '.env')
 # ---------- Segurança ----------
 SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = env.bool('DJANGO_DEBUG', default=False)
+# A chave assina os logins (JWT): em produção, recusa iniciar com a chave de exemplo ou curta demais
+if not DEBUG and (len(SECRET_KEY) < 40 or SECRET_KEY.startswith('gere-')):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured('DJANGO_SECRET_KEY de exemplo ou curta: gere uma chave nova (veja o README).')
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=[])
 
 
@@ -139,6 +143,9 @@ FOXESS_API_KEY = env('FOXESS_API_KEY', default='')
 HUAWEI_API_URL = env('HUAWEI_API_URL', default='https://la5.fusionsolar.huawei.com/thirdData')
 HUAWEI_USUARIO = env('HUAWEI_USUARIO', default='')
 HUAWEI_SENHA = env('HUAWEI_SENHA', default='')
+# uazapi (WhatsApp): envio do código de acesso no login. URL = endereço do servidor no painel da uazapi
+UAZAPI_URL = env('UAZAPI_URL', default='')
+UAZAPI_TOKEN = env('UAZAPI_TOKEN', default='')   # token da INSTÂNCIA
 
 
 # ---------- API (Django REST Framework + login JWT) ----------
@@ -151,12 +158,24 @@ REST_FRAMEWORK = {
     'SEARCH_PARAM': 'busca',      # ?busca=texto
     'ORDERING_PARAM': 'ordem',    # ?ordem=nome  /  ?ordem=-potencia_kwp
     'COERCE_DECIMAL_TO_STRING': False,  # números como número no JSON (não como texto)
+    # Limite de tentativas no login (por IP). Atrás do Caddy: 1 proxy → usa o IP real do visitante
+    'NUM_PROXIES': 1,
+    'DEFAULT_THROTTLE_RATES': {'login': '10/min', 'renovar': '30/min'},
+}
+
+# Memória compartilhada entre os atendentes do Gunicorn (contadores de tentativas de login).
+# Fica numa tabela do banco, criada pela migração usuarios/0004.
+CACHES = {
+    'default': {'BACKEND': 'django.core.cache.backends.db.DatabaseCache', 'LOCATION': 'cache_sistema'},
 }
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_ACCESS_MINUTES', default=30)),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=env.int('JWT_REFRESH_DAYS', default=7)),
+    # Validade máxima do login (a tela ainda encerra a sessão ao fechar o navegador)
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=env.int('JWT_REFRESH_HOURS', default=12)),
     'UPDATE_LAST_LOGIN': True,
+    # Trocar a senha derruba os logins abertos (o token guarda um resumo da senha)
+    'CHECK_REVOKE_TOKEN': True,
 }
 
 

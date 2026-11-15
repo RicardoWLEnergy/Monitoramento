@@ -86,3 +86,21 @@ class AuxiliaresTests(SimpleTestCase):
 
     def test_ms(self):
         self.assertEqual(ms(datetime(2026, 1, 1, tzinfo=tz.utc)), 1767225600000)
+
+
+class LoginSuspensoTests(SimpleTestCase):
+    """Depois de um login recusado, não tenta de novo por 30 min (5 erros bloqueiam a conta)."""
+
+    def test_nao_insiste_no_login_recusado(self):
+        from unittest.mock import MagicMock
+        from .huawei import HuaweiCliente, HuaweiLoginErro
+        api = HuaweiCliente('https://la5.exemplo/thirdData', 'usuario', 'senha-errada')
+        recusa = MagicMock(status_code=200, content=b'{}', headers={}, cookies={})
+        recusa.json.return_value = {'success': False, 'failCode': 20400}
+        api.sessao.post = MagicMock(return_value=recusa)
+        with self.assertRaises(HuaweiLoginErro):
+            api.chamar('getStationList')
+        for _ in range(5):
+            with self.assertRaisesMessage(HuaweiLoginErro, 'suspenso'):
+                api.chamar('getStationList')
+        self.assertEqual(api.sessao.post.call_count, 1)        # só 1 tentativa real de login

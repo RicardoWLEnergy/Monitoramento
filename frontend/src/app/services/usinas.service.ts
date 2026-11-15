@@ -31,6 +31,7 @@ export interface UsinaLista {
   geracao_hoje_kwh: number;
   geracao_mes_kwh: number;
   esperado_mes_kwh: number;
+  esperado_ate_hoje_kwh: number;   // esperado do mês proporcional aos dias já passados
 }
 
 export interface ClienteVinculado { id: number; nome: string; email: string; }
@@ -80,11 +81,16 @@ export interface Inversor {
 export interface PontoCurva { hora: string; kw: number; }
 export interface Curva { data: string; fuso: string; pontos: PontoCurva[]; }
 
+/** Energia de um dia (null = sem dados) e o esperado do dia (esperado do mês ÷ dias do mês; null = não cadastrado). */
+export interface DiaGeracao { data: string; kwh: number | null; esperado_kwh: number | null; }
+export interface GeracaoPeriodo { inicio: string; fim: string; dias: DiaGeracao[]; }
+
 export interface MesGeracao {
   mes: string;          // 2026-11
   rotulo: string;       // nov/26
   gerado_kwh: number;
-  esperado_kwh: number;
+  esperado_kwh: number;            // do mês inteiro
+  esperado_ate_hoje_kwh: number;   // mês atual: proporcional aos dias passados; meses fechados: = esperado_kwh
   parcial: boolean;     // mês em andamento
 }
 
@@ -94,20 +100,35 @@ export interface ResumoUsinas {
   total: number; potencia_kwp: number; online: number; noite: number; alerta: number; offline: number;
 }
 
-/** O que já existe no banco para a usina. */
+/** Importação de histórico pedida na tela (o servidor importa em segundo plano). */
+export interface ImportacaoHistorico {
+  id: number;
+  inicio: string;
+  fim: string;
+  curvas: boolean;
+  status: 'fila' | 'importando' | 'concluida' | 'erro';
+  status_nome: string;
+  etapa: 'energia' | 'curva';
+  etapa_nome: string;
+  passos_feitos: number;
+  passos_total: number;
+  dias_energia: number;
+  dias_curva: number;
+  leituras: number;
+  falhas: string[];
+  solicitado_por_nome: string | null;
+  criado_em: string;
+  iniciado_em: string | null;
+  concluido_em: string | null;
+}
+
+/** O que já existe no banco para a usina + a importação mais recente. */
 export interface CoberturaHistorico {
   energia_diaria: { inicio: string | null; fim: string | null; dias: number };
   curvas: { inicio: string | null; fim: string | null; dias: number };
   limite_curvas: string;   // dia mais antigo de curva que o banco guarda (retenção)
   inversores: number;
-}
-
-export interface ResultadoImportacao {
-  dias_energia: number;
-  dias_curva: number;
-  leituras: number;
-  falhas: string[];
-  cobertura: CoberturaHistorico;
+  importacao: ImportacaoHistorico | null;
 }
 
 export interface FiltroUsinas {
@@ -148,6 +169,11 @@ export class UsinasService {
     return this.http.get<Curva>(`/api/usinas/${id}/curva/`, { params });
   }
 
+  /** Energia de cada dia do período (até 1 ano). */
+  geracaoDiaria(id: number, inicio: string, fim: string): Observable<GeracaoPeriodo> {
+    return this.http.get<GeracaoPeriodo>(`/api/usinas/${id}/geracao-diaria/`, { params: { inicio, fim } });
+  }
+
   geracaoMensal(id: number, meses = 12): Observable<MesGeracao[]> {
     return this.http.get<MesGeracao[]>(`/api/usinas/${id}/geracao-mensal/`, { params: { meses } });
   }
@@ -174,9 +200,9 @@ export class UsinasService {
     return this.http.get<CoberturaHistorico>(`/api/usinas/${id}/historico/`);
   }
 
-  /** Busca na plataforma a geração do período (pode levar alguns minutos). */
-  importarHistorico(id: number, inicio: string, fim: string, curvas = true): Observable<ResultadoImportacao> {
-    return this.http.post<ResultadoImportacao>(`/api/usinas/${id}/historico/`, { inicio, fim, curvas });
+  /** Pede a importação do período: o servidor importa em segundo plano (acompanhe pela cobertura). */
+  importarHistorico(id: number, inicio: string, fim: string, curvas = true): Observable<CoberturaHistorico> {
+    return this.http.post<CoberturaHistorico>(`/api/usinas/${id}/historico/`, { inicio, fim, curvas });
   }
 
   /** "Apaga" a usina: ela é desativada (some do sistema), mas o histórico fica no banco. Só Admin. */

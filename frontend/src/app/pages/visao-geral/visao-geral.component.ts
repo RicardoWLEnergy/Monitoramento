@@ -9,6 +9,8 @@ import {
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { Dashboard, DashboardService } from '../../services/dashboard.service';
 import { GraficosService, echarts } from '../../services/graficos.service';
+import { atalhosPeriodo, hojeIso, resumoPeriodo } from '../../services/periodo';
+import { GeracaoPeriodo, PontoCurva } from '../../services/usinas.service';
 
 /** Visão geral: dashboard das usinas visíveis ao usuário — o que importa saber de relance. */
 @Component({
@@ -32,7 +34,21 @@ export class VisaoGeralComponent {
 
   readonly kpis = computed(() => this.dados()?.kpis);
   readonly temEsperado = computed(() => (this.dados()?.geracao_mensal ?? []).some(m => m.esperado_kwh > 0));
-  readonly opcoesCurva = computed(() => this.graficos.curvaPotencia(this.dados()?.curva_hoje ?? []));
+  // Gráfico de cima: "Dia" (potência somada) ou "Período" (energia de cada dia, somando as usinas)
+  readonly modo = signal<'dia' | 'periodo'>('dia');
+  readonly hojeIso = hojeIso();
+  readonly dataCurva = signal(this.hojeIso);
+  readonly curva = signal<PontoCurva[] | null>(null);   // null = a de hoje, que vem no painel
+  readonly atalhos = atalhosPeriodo();
+  readonly inicioPeriodo = signal(this.atalhos[1].inicio);
+  readonly fimPeriodo = signal(this.atalhos[1].fim);
+  readonly periodo = signal<GeracaoPeriodo | null>(null);
+  readonly erroPeriodo = signal<string | null>(null);
+  readonly resumoPeriodo = computed(() => resumoPeriodo(this.periodo()?.dias ?? []));
+
+  readonly pontosCurva = computed(() => this.curva() ?? this.dados()?.curva_hoje ?? []);
+  readonly opcoesCurva = computed(() => this.graficos.curvaPotencia(this.pontosCurva()));
+  readonly opcoesPeriodo = computed(() => this.graficos.geracaoDiaria(this.periodo()?.dias ?? [], this.hojeIso));
   readonly opcoesMensal = computed(() => this.graficos.geracaoMensal(this.dados()?.geracao_mensal ?? [], 'MWh'));
 
   constructor() {
@@ -46,6 +62,44 @@ export class VisaoGeralComponent {
       next: d => { this.dados.set(d); this.carregando.set(false); },
       error: e => { this.erro.set(mensagemDeErro(e, 'Não foi possível carregar o painel.')); this.carregando.set(false); },
     });
+  }
+
+  mudarModo(modo: 'dia' | 'periodo'): void {
+    this.modo.set(modo);
+    if (modo === 'periodo' && !this.periodo()) this.carregarPeriodo();
+  }
+
+  mudarDia(data: string): void {
+    if (!data) return;
+    this.dataCurva.set(data);
+    if (data === this.hojeIso) { this.curva.set(null); return; }
+    this.api.curva(data).subscribe({ next: c => this.curva.set(c.pontos), error: () => this.curva.set([]) });
+  }
+
+  mudarPeriodo(inicio: string, fim: string): void {
+    if (!inicio || !fim) return;
+    this.inicioPeriodo.set(inicio);
+    this.fimPeriodo.set(fim);
+    this.carregarPeriodo();
+  }
+
+  carregarPeriodo(): void {
+    this.erroPeriodo.set(null);
+    this.api.geracaoDiaria(this.inicioPeriodo(), this.fimPeriodo()).subscribe({
+      next: p => this.periodo.set(p),
+      error: e => {
+        this.periodo.set(null);
+        this.erroPeriodo.set(mensagemDeErro(e, 'Não foi possível carregar o período.'));
+      },
+    });
+  }
+
+  /** Clique numa barra do período: abre a curva de potência daquele dia. */
+  abrirDia(indice: number | undefined): void {
+    const dia = indice === undefined ? null : this.periodo()?.dias[indice];
+    if (!dia) return;
+    this.modo.set('dia');
+    this.mudarDia(dia.data);
   }
 
   ultimaLeitura(iso: string | null): string {

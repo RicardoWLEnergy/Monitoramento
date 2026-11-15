@@ -59,6 +59,10 @@ class HuaweiErro(Exception):
         return self.codigo == 407
 
 
+class HuaweiLoginErro(HuaweiErro):
+    """Login recusado (ou suspenso): quem chama NÃO deve insistir — 5 erros bloqueiam a conta por 30 min."""
+
+
 def em_lotes(itens: list, tamanho: int):
     for i in range(0, len(itens), tamanho):
         yield itens[i:i + tamanho]
@@ -73,6 +77,8 @@ class HuaweiCliente:
     """Faz login, guarda o token e respeita um intervalo mínimo por interface."""
 
     INTERVALO_POR_ENDPOINT = 1.0   # segundos; ajustar após o teste com a conta real
+    # Após um login recusado, não tenta de novo por 30 min: a Huawei bloqueia a conta com 5 erros
+    PAUSA_APOS_FALHA_LOGIN = 30 * 60
 
     def __init__(self, base_url: str, usuario: str, senha: str, timeout: int = 60):
         if not usuario or not senha:
@@ -86,9 +92,12 @@ class HuaweiCliente:
         self.chamadas = 0
         self._ultima_chamada: dict[str, float] = {}
         self._trava = threading.Lock()
+        self._login_suspenso_ate = 0.0
 
     # ---------- infraestrutura ----------
     def login(self) -> None:
+        if time.monotonic() < self._login_suspenso_ate:
+            raise HuaweiLoginErro('login', None, 'login suspenso por 30 min após uma recusa (evita bloquear a conta)')
         resposta = self.sessao.post(f'{self.base_url}/login', json={'userName': self.usuario, 'systemCode': self.senha},
                                     timeout=self.timeout)
         self.chamadas += 1
@@ -96,7 +105,8 @@ class HuaweiCliente:
         dados = resposta.json() if resposta.content else {}
         token = resposta.headers.get('xsrf-token') or resposta.cookies.get('XSRF-TOKEN')
         if not token or dados.get('failCode') not in (0, None) or dados.get('success') is False:
-            raise HuaweiErro('login', dados.get('failCode'), dados.get('message') or 'usuário ou senha inválidos')
+            self._login_suspenso_ate = time.monotonic() + self.PAUSA_APOS_FALHA_LOGIN
+            raise HuaweiLoginErro('login', dados.get('failCode'), dados.get('message') or 'usuário ou senha inválidos')
         self.token = token
         self.sessao.headers['XSRF-TOKEN'] = token
 

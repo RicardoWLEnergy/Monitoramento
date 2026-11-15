@@ -48,11 +48,53 @@ class AuthApiTests(ApiBase):
     def test_eu_mostra_perfil_e_altera_so_nome_e_whatsapp(self):
         self.entrar(self.cliente)
         self.assertEqual(self.client.get('/api/auth/eu/').data['perfil'], 'cliente')
-        r = self.client.patch('/api/auth/eu/', {'nome': 'Novo Nome', 'whatsapp': '(61) 98888-7777', 'perfil': 'admin'})
+        r = self.client.patch('/api/auth/eu/', {'nome': 'Novo Nome', 'whatsapp': '(61) 98888-7777', 'perfil': 'admin',
+                                                'email': 'outro@x.com', 'senha_atual': 'Senha-Forte-123'})
         self.assertEqual(r.status_code, 200)
         self.cliente.refresh_from_db()
-        self.assertEqual((self.cliente.nome, self.cliente.whatsapp, self.cliente.perfil),
-                         ('Novo Nome', '+5561988887777', 'cliente'))
+        self.assertEqual((self.cliente.nome, self.cliente.whatsapp, self.cliente.perfil, self.cliente.email),
+                         ('Novo Nome', '+5561988887777', 'cliente', 'cli@x.com'))   # e-mail não muda por aqui
+
+    def test_trocar_whatsapp_exige_a_senha_atual(self):
+        self.entrar(self.cliente)
+        r = self.client.patch('/api/auth/eu/', {'whatsapp': '(61) 98888-7777'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('senha_atual', r.data)
+        r = self.client.patch('/api/auth/eu/', {'whatsapp': '(61) 98888-7777', 'senha_atual': 'errada'})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.client.patch('/api/auth/eu/', {'nome': 'Só o nome'}).status_code, 200)   # nome não exige
+
+    def test_10_senhas_erradas_bloqueiam_o_email(self):
+        from django.core.cache import cache
+        from .views import LoginView
+        cache.clear()
+        with patch.object(LoginView, 'throttle_classes', []):    # isola do limite por IP (testado abaixo)
+            for _ in range(10):
+                self.client.post('/api/auth/login/', {'email': 'Admin@X.com', 'password': 'errada'})
+            r = self.client.post('/api/auth/login/', {'email': 'admin@x.com', 'password': 'Senha-Forte-123'})
+        self.assertEqual(r.status_code, 429)                     # nem a senha certa entra durante o bloqueio
+        self.assertIn('15 minutos', r.data['detail'])
+        cache.clear()
+
+    def test_limite_por_ip_no_login(self):
+        from django.core.cache import cache
+        cache.clear()
+        codigos = [self.client.post('/api/auth/login/', {'email': f'x{i}@x.com', 'password': 'e'}).status_code
+                   for i in range(11)]
+        self.assertEqual(codigos[:10], [401] * 10)
+        self.assertEqual(codigos[10], 429)
+        cache.clear()
+
+    def test_trocar_senha_derruba_os_logins_abertos(self):
+        r = self.client.post('/api/auth/login/', {'email': 'cli@x.com', 'password': 'Senha-Forte-123'})
+        antigo = r.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {antigo}')
+        self.assertEqual(self.client.get('/api/auth/eu/').status_code, 200)
+        r = self.client.post('/api/auth/trocar-senha/', {'senha_atual': 'Senha-Forte-123', 'senha_nova': 'Outra-Senha-456'})
+        self.assertIn('access', r.data)                          # quem trocou recebe login novo
+        self.assertEqual(self.client.get('/api/auth/eu/').status_code, 401)   # o antigo caiu
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {r.data["access"]}')
+        self.assertEqual(self.client.get('/api/auth/eu/').status_code, 200)
 
     def test_trocar_senha(self):
         self.entrar(self.cliente)

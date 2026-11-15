@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import connection
+from django.utils import timezone
 
 TABELA = 'monitoramento_leitura'
 
@@ -44,7 +45,7 @@ def particoes_existentes() -> list[str]:
 
 def criar_particoes(meses_antes: int = 0, meses_depois: int = 3, hoje: date | None = None) -> list[str]:
     """Cria (se não existirem) as partições de [hoje - meses_antes, hoje + meses_depois]."""
-    base = (hoje or date.today()).replace(day=1)
+    base = (hoje or timezone.localdate()).replace(day=1)
     criadas = []
     with connection.cursor() as c:
         for i in range(-meses_antes, meses_depois + 1):
@@ -62,7 +63,7 @@ def criar_particoes(meses_antes: int = 0, meses_depois: int = 3, hoje: date | No
 def remover_particoes_antigas(retencao_meses: int | None = None, hoje: date | None = None) -> list[str]:
     """Descarta as partições anteriores ao prazo de retenção (mês atual + meses anteriores)."""
     retencao = retencao_meses or settings.LEITURAS_RETENCAO_MESES
-    limite = nome_particao(_somar_meses((hoje or date.today()).replace(day=1), -(retencao - 1)))
+    limite = nome_particao(_somar_meses((hoje or timezone.localdate()).replace(day=1), -(retencao - 1)))
     removidas = [p for p in particoes_existentes() if p < limite]
     with connection.cursor() as c:
         for nome in removidas:

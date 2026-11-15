@@ -1,5 +1,5 @@
 <div class="tela">
-  <form class="cartao" (ngSubmit)="entrar()">
+  <form class="cartao" (ngSubmit)="confirmar()">
     <app-logo fundo="escuro" [altura]="40" />
 
     <div class="cabecalho">
@@ -11,32 +11,60 @@
     @if (erro()) {
       <div class="alerta erro">{{ erro() }}</div>
     }
+    @if (modo() === 'codigo' && enviado(); as e) {
+      <div class="alerta ok">{{ e.detail }} Ele vale por {{ e.validade_minutos }} minutos.</div>
+    }
 
     <label class="campo">
       <span class="label">E-mail</span>
       <span class="com-icone">
         <lucide-icon [img]="icones.Mail" [size]="16" [strokeWidth]="1.7" />
         <input class="input" type="email" name="email" autocomplete="username"
-               placeholder="voce@empresa.com.br" [(ngModel)]="email" required>
+               placeholder="voce@empresa.com.br" [(ngModel)]="email" (ngModelChange)="emailAlterado()" required>
       </span>
     </label>
 
-    <label class="campo">
-      <span class="label">Senha</span>
-      <span class="com-icone">
-        <lucide-icon [img]="icones.Lock" [size]="16" [strokeWidth]="1.7" />
-        <input class="input" type="password" name="senha" autocomplete="current-password"
-               placeholder="••••••••" [(ngModel)]="senha" required>
-      </span>
-    </label>
+    @if (modo() === 'senha') {
+      <label class="campo">
+        <span class="label">Senha</span>
+        <span class="com-icone">
+          <lucide-icon [img]="icones.Lock" [size]="16" [strokeWidth]="1.7" />
+          <input class="input" type="password" name="senha" autocomplete="current-password"
+                 placeholder="••••••••" [(ngModel)]="senha" required>
+        </span>
+      </label>
+    } @else if (enviado()) {
+      <label class="campo">
+        <span class="label">Código recebido no WhatsApp</span>
+        <span class="com-icone">
+          <lucide-icon [img]="icones.KeyRound" [size]="16" [strokeWidth]="1.7" />
+          <input class="input codigo" type="text" name="codigo" inputmode="numeric" autocomplete="one-time-code"
+                 maxlength="6" placeholder="000000" [(ngModel)]="codigo" required>
+        </span>
+      </label>
+    }
 
     <button class="btn primary entrar" type="submit" [disabled]="carregando()">
       @if (carregando()) {
-        <span class="spinner"></span> Entrando...
+        <span class="spinner"></span> Aguarde...
+      } @else if (modo() === 'codigo' && !enviado()) {
+        <lucide-icon [img]="icones.MessageCircle" [size]="16" [strokeWidth]="2" /> Enviar código
       } @else {
         Entrar <lucide-icon [img]="icones.ArrowRight" [size]="16" [strokeWidth]="2" />
       }
     </button>
 
+    <div class="opcoes">
+      @if (modo() === 'senha') {
+        <button class="link" type="button" (click)="trocarModo('codigo')">Entrar com código pelo WhatsApp →</button>
+      } @else {
+        @if (enviado()) {
+          <button class="link" type="button" (click)="enviarCodigo()" [disabled]="espera() > 0 || carregando()">
+            {{ espera() > 0 ? 'Reenviar código em ' + espera() + ' s' : 'Reenviar código' }}
+          </button>
+        }
+        <button class="link" type="button" (click)="trocarModo('senha')">Entrar com senha →</button>
+      }
+    </div>
   </form>
 </div>

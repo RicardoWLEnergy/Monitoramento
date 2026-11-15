@@ -18,7 +18,12 @@ export interface Usuario {
 
 interface Tokens { access: string; refresh: string; }
 
+/** Resposta de "enviar código pelo WhatsApp". */
+export interface CodigoEnviado { detail: string; numero: string; validade_minutos: number; reenvio_segundos: number; }
+
 const CHAVE_TOKENS = 'wl-tokens';
+const CANAL_SESSAO = 'wl-sessao';
+type MensagemSessao = { tipo: 'pedir' } | { tipo: 'tokens'; tokens: Tokens } | { tipo: 'sair' };
 
 export const ROTULO_PERFIL: Record<Perfil, string> = {
   admin: 'Admin', colaborador: 'Colaborador', cliente: 'Cliente',
@@ -27,7 +32,11 @@ export const ROTULO_PERFIL: Record<Perfil, string> = {
 /**
  * Login com a API Django (JWT).
  * - access: vale 30 min e vai em toda requisição (ver auth.interceptor.ts)
- * - refresh: vale 7 dias e serve para pegar um novo access sem pedir a senha de novo
+ * - refresh: vale no máximo 12 h e serve para pegar um novo access sem pedir a senha de novo
+ *
+ * Os tokens ficam no sessionStorage: FECHAR O NAVEGADOR (ou todas as guias do sistema) ENCERRA A SESSÃO.
+ * Guias abertas ao mesmo tempo compartilham o login por um BroadcastChannel: a guia nova pede os
+ * tokens às outras; sair numa guia sai de todas.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -43,13 +52,24 @@ export class AuthService {
   readonly iniciais = computed(() =>
     (this._usuario()?.nome ?? '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join(''));
 
-  /** Chamado ao abrir o app: se houver tokens salvos, recupera o usuário. */
+  private readonly canal = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CANAL_SESSAO) : null;
+  /** Enquanto esta guia espera os tokens de outra guia aberta. */
+  private aoChegarTokens: (() => void) | null = null;
+
+  constructor() {
+    try { localStorage.removeItem(CHAVE_TOKENS); } catch { /* ignora */ }   // logins antigos, guardados sem prazo
+    this.canal?.addEventListener('message', e => this.aoReceber(e.data as MensagemSessao));
+  }
+
+  /** Chamado ao abrir o app: recupera o usuário com os tokens desta guia ou de outra guia aberta. */
   async iniciar(): Promise<void> {
+    if (!this.tokens()) await this.pedirTokensDasOutrasGuias();
     if (!this.tokens()) return;
     try {
       await this.carregarUsuario();
-    } catch {
-      this.sair();
+    } catch (erro) {
+      // Só encerra o login se o servidor recusar; queda de rede/atualização do servidor não desloga as guias
+      if (erro instanceof HttpErrorResponse && (erro.status === 401 || erro.status === 403)) this.sair();
     }
   }
 
@@ -57,6 +77,26 @@ export class AuthService {
     try {
       const tokens = await firstValueFrom(
         this.http.post<Tokens>('/api/auth/login/', { email: email.trim(), password: senha }));
+      this.salvarTokens(tokens);
+      await this.carregarUsuario();
+    } catch (erro) {
+      throw new Error(mensagemDeErro(erro, 'Não foi possível entrar.'));
+    }
+  }
+
+  /** Envia um código de 6 números para o WhatsApp cadastrado no e-mail. */
+  async pedirCodigo(email: string): Promise<CodigoEnviado> {
+    try {
+      return await firstValueFrom(this.http.post<CodigoEnviado>('/api/auth/codigo/', { email: email.trim() }));
+    } catch (erro) {
+      throw new Error(mensagemDeErro(erro, 'Não foi possível enviar o código.'));
+    }
+  }
+
+  async entrarComCodigo(email: string, codigo: string): Promise<void> {
+    try {
+      const tokens = await firstValueFrom(
+        this.http.post<Tokens>('/api/auth/codigo/entrar/', { email: email.trim(), codigo: codigo.trim() }));
       this.salvarTokens(tokens);
       await this.carregarUsuario();
     } catch (erro) {
@@ -77,17 +117,47 @@ export class AuthService {
       }));
   }
 
+  /** Sai nesta guia e nas outras guias abertas. */
   sair(): void {
-    this._usuario.set(null);
-    try { localStorage.removeItem(CHAVE_TOKENS); } catch { /* ignora */ }
+    this.limpar();
+    this.canal?.postMessage({ tipo: 'sair' } satisfies MensagemSessao);
   }
 
   tokenAcesso(): string | null { return this.tokens()?.access ?? null; }
   tokenRenovacao(): string | null { return this.tokens()?.refresh ?? null; }
 
+  private limpar(): void {
+    this._usuario.set(null);
+    try { sessionStorage.removeItem(CHAVE_TOKENS); } catch { /* ignora */ }
+  }
+
+  private aoReceber(m: MensagemSessao): void {
+    if (m.tipo === 'pedir') {
+      const tokens = this.tokens();
+      if (tokens) this.canal?.postMessage({ tipo: 'tokens', tokens } satisfies MensagemSessao);
+    } else if (m.tipo === 'tokens' && this.aoChegarTokens) {
+      this.salvarTokens(m.tokens);
+      this.aoChegarTokens();
+    } else if (m.tipo === 'sair' && this.tokens()) {
+      this.limpar();
+      window.location.assign('/login');
+    }
+  }
+
+  /** Guia nova: pergunta às guias abertas se já há login (espera no máximo 300 ms). */
+  private pedirTokensDasOutrasGuias(): Promise<void> {
+    if (!this.canal) return Promise.resolve();
+    return new Promise(resolve => {
+      const terminar = () => { clearTimeout(limite); this.aoChegarTokens = null; resolve(); };
+      const limite = setTimeout(terminar, 300);
+      this.aoChegarTokens = terminar;
+      this.canal!.postMessage({ tipo: 'pedir' } satisfies MensagemSessao);
+    });
+  }
+
   private tokens(): Tokens | null {
     try {
-      const bruto = localStorage.getItem(CHAVE_TOKENS);
+      const bruto = sessionStorage.getItem(CHAVE_TOKENS);
       return bruto ? (JSON.parse(bruto) as Tokens) : null;
     } catch {
       return null;
@@ -95,7 +165,7 @@ export class AuthService {
   }
 
   private salvarTokens(tokens: Tokens): void {
-    try { localStorage.setItem(CHAVE_TOKENS, JSON.stringify(tokens)); } catch { /* ignora */ }
+    try { sessionStorage.setItem(CHAVE_TOKENS, JSON.stringify(tokens)); } catch { /* ignora */ }
   }
 }
 

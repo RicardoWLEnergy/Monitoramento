@@ -99,7 +99,8 @@ export class UsinasComponent {
 
   // ---------- Auxiliares ----------
   desempenho(u: UsinaLista): number | null {
-    return u.esperado_mes_kwh > 0 ? (u.geracao_mes_kwh / u.esperado_mes_kwh) * 100 : null;
+    // Gerado no mês × esperado até hoje (proporcional aos dias passados do mês)
+    return u.esperado_ate_hoje_kwh > 0 ? (u.geracao_mes_kwh / u.esperado_ate_hoje_kwh) * 100 : null;
   }
 
   ultimaLeitura(iso: string | null): string {

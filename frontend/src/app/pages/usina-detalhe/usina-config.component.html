@@ -66,11 +66,42 @@
         </label>
       </div>
 
+      @if (importacao(); as i) {
+        <div class="importacao" [class.erro]="i.status === 'erro'">
+          @switch (i.status) {
+            @case ('fila') {
+              <span><strong>Na fila</strong> · a importação começa em instantes.</span>
+            }
+            @case ('importando') {
+              <span><strong>Importando {{ i.etapa_nome.toLowerCase() }}</strong> · {{ progresso() }}%</span>
+            }
+            @case ('concluida') {
+              <span><strong>Última importação concluída</strong> em {{ i.concluido_em | date: "dd/MM 'às' HH:mm" }}
+                · {{ resumoImportacao(i) }}.</span>
+            }
+            @case ('erro') {
+              <span><strong>A última importação não foi concluída</strong> · {{ i.falhas[0] }}</span>
+            }
+          }
+          <span class="sub">{{ i.inicio | date: 'dd/MM/yyyy' }} a {{ i.fim | date: 'dd/MM/yyyy' }}
+            @if (i.solicitado_por_nome) { · pedido por {{ i.solicitado_por_nome }} }</span>
+          @if (importando()) {
+            <div class="barra" role="progressbar" [attr.aria-valuenow]="progresso()" aria-valuemin="0" aria-valuemax="100">
+              <div [style.width.%]="progresso()"></div>
+            </div>
+          }
+          @if (i.status === 'concluida' && i.falhas.length) {
+            <span class="erro-msg">{{ i.falhas.length | i18nPlural: { '=1': '1 falha', other: '# falhas' } }}:
+              {{ i.falhas.slice(0, 2).join('; ') }}</span>
+          }
+        </div>
+      }
+
       <div class="rodape-secao">
-        <span class="sub">Tempo estimado: <b>{{ estimativaTexto }}</b> · não feche a página durante a importação.</span>
+        <span class="sub">Tempo estimado: <b>{{ estimativaTexto }}</b> · pode fechar a página: a importação continua no servidor.</span>
         @if (aviso()['historico']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
-        <button class="btn primary" type="button" (click)="importarHistorico()" [disabled]="salvando() === 'historico'">
-          @if (salvando() === 'historico') { <span class="spinner"></span> Importando... }
+        <button class="btn primary" type="button" (click)="importarHistorico()" [disabled]="salvando() === 'historico' || importando()">
+          @if (salvando() === 'historico' || importando()) { <span class="spinner"></span> Importando... }
           @else { <lucide-icon [img]="icones.Download" [size]="16" [strokeWidth]="1.8" /> Importar dados }
         </button>
       </div>

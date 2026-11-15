@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { AuthService } from './auth.service';
 
-const SEM_TOKEN = ['/api/auth/login/', '/api/auth/renovar/'];
+const SEM_TOKEN = ['/api/auth/login/', '/api/auth/renovar/', '/api/auth/codigo/'];
 
 /**
  * Coloca o token em toda chamada à API. Se a API responder 401 (token vencido),
@@ -24,9 +24,12 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       if (erro.status !== 401 || !auth.tokenRenovacao()) return throwError(() => erro);
       return auth.renovar().pipe(
         switchMap(novo => next(comToken(novo))),
-        catchError(falha => {
-          auth.sair();
-          router.navigateByUrl('/login');
+        catchError((falha: HttpErrorResponse) => {
+          // Login vencido/recusado: sai. Queda de rede ou servidor reiniciando: só repassa o erro.
+          if (falha.status === 400 || falha.status === 401) {
+            auth.sair();
+            router.navigateByUrl('/login');
+          }
           return throwError(() => falha);
         }),
       );

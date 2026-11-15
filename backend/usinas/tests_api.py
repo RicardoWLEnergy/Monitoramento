@@ -164,17 +164,34 @@ class ImportarHistoricoApiTests(UsinasApiBase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual((r.data['energia_diaria']['dias'], r.data['inversores']), (0, 1))
 
-    def test_colaborador_importa_periodo(self):
-        from unittest.mock import patch
+    def test_colaborador_pede_importacao_e_ela_vai_para_a_fila(self):
+        from monitoramento.models import ImportacaoHistorico
         hoje = timezone.localdate()
-        with patch('usinas.views.importar_periodo', return_value={'dias_energia': 3, 'dias_curva': 3,
-                                                                  'leituras': 800, 'falhas': []}) as importar:
-            self.entrar(self.colab)
-            r = self.client.post(self.url(), {'inicio': hoje.isoformat(), 'fim': hoje.isoformat()}, format='json')
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data['leituras'], 800)
-        self.assertIn('cobertura', r.data)
-        importar.assert_called_once_with(self.minha, inicio=hoje, fim=hoje, curvas=True)
+        self.entrar(self.colab)
+        r = self.client.post(self.url(), {'inicio': hoje.isoformat(), 'fim': hoje.isoformat()}, format='json')
+        self.assertEqual(r.status_code, 202)                    # responde na hora: quem importa é o coletor
+        self.assertEqual(r.data['importacao']['status'], 'fila')
+        self.assertIn('energia_diaria', r.data)                 # junto com o que já existe no banco
+        imp = ImportacaoHistorico.objects.get()
+        self.assertEqual((imp.usina, imp.inicio, imp.fim, imp.curvas, imp.solicitado_por),
+                         (self.minha, hoje, hoje, True, self.colab))
+        self.assertEqual(self.client.get(self.url()).data['importacao']['id'], imp.pk)   # a tela acompanha pelo GET
+
+    def test_uma_importacao_ativa_por_usina(self):
+        hoje = timezone.localdate().isoformat()
+        self.entrar(self.admin)
+        self.assertEqual(self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json').status_code, 202)
+        r = self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('em andamento', r.data['detail'])
+
+    def test_depois_de_concluida_pode_pedir_outra(self):
+        from monitoramento.models import ImportacaoHistorico
+        hoje = timezone.localdate().isoformat()
+        self.entrar(self.admin)
+        self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json')
+        ImportacaoHistorico.objects.update(status=ImportacaoHistorico.Status.CONCLUIDA)
+        self.assertEqual(self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json').status_code, 202)
 
     def test_periodo_invalido(self):
         hoje = timezone.localdate()
@@ -184,15 +201,66 @@ class ImportarHistoricoApiTests(UsinasApiBase):
         r = self.client.post(self.url(), {'inicio': '2020-01-01', 'fim': hoje.isoformat()}, format='json')
         self.assertEqual(r.status_code, 400)   # mais de 400 dias
 
-    def test_erro_da_plataforma_vira_mensagem(self):
-        from unittest.mock import patch
-        from integracoes.huawei import HuaweiErro
-        hoje = timezone.localdate().isoformat()
+
+class GeracaoDiariaApiTests(UsinasApiBase):
+    """Gráfico 'Período' da usina: energia de cada dia."""
+
+    def url(self, usina=None, **params):
+        from urllib.parse import urlencode
+        return f'/api/usinas/{(usina or self.minha).pk}/geracao-diaria/?{urlencode(params)}'
+
+    def test_cliente_ve_os_dias_da_sua_usina_com_dias_sem_dado(self):
+        from datetime import date
+        GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 11, 1), energia_kwh='288.400')
+        GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 11, 3), energia_kwh='301.250')
+        GeracaoEsperada.objects.create(usina=self.minha, mes=11, energia_kwh=9000)   # 9.000 ÷ 30 dias = 300/dia
+        self.entrar(self.cliente)
+        r = self.client.get(self.url(inicio='2026-11-01', fim='2026-11-03'))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['dias'], [
+            {'data': '2026-11-01', 'kwh': 288.4, 'esperado_kwh': 300.0},
+            {'data': '2026-11-02', 'kwh': None, 'esperado_kwh': 300.0},     # sem dado: não vira zero
+            {'data': '2026-11-03', 'kwh': 301.25, 'esperado_kwh': 300.0},
+        ])
+
+    def test_sem_geracao_esperada_o_esperado_do_dia_e_vazio(self):
+        from datetime import date
+        GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 10, 31), energia_kwh=10)
         self.entrar(self.admin)
-        with patch('usinas.views.importar_periodo', side_effect=HuaweiErro('getKpiStationDay', 407)):
-            r = self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json')
-        self.assertEqual(r.status_code, 400)
-        self.assertIn('407', r.data['detail'])
+        r = self.client.get(self.url(inicio='2026-10-31', fim='2026-10-31'))
+        self.assertEqual(r.data['dias'], [{'data': '2026-10-31', 'kwh': 10.0, 'esperado_kwh': None}])
+
+    def test_cliente_nao_ve_usina_alheia(self):
+        self.entrar(self.cliente)
+        self.assertEqual(self.client.get(self.url(self.alheia)).status_code, 404)
+
+    def test_padrao_ultimos_30_dias_e_futuro_vira_hoje(self):
+        from datetime import timedelta
+        hoje = timezone.localdate()
+        self.entrar(self.admin)
+        r = self.client.get(self.url())
+        self.assertEqual((len(r.data['dias']), r.data['fim']), (30, hoje.isoformat()))
+        r = self.client.get(self.url(inicio=hoje.isoformat(), fim=(hoje + timedelta(days=5)).isoformat()))
+        self.assertEqual(r.data['fim'], hoje.isoformat())
+
+    def test_periodo_invalido(self):
+        self.entrar(self.admin)
+        self.assertEqual(self.client.get(self.url(inicio='2026-11-05', fim='2026-11-01')).status_code, 400)
+        self.assertEqual(self.client.get(self.url(inicio='2024-01-01', fim='2026-11-01')).status_code, 400)
+        self.assertEqual(self.client.get(self.url(inicio='ontem')).status_code, 400)
+
+
+class EntradasInvalidasApiTests(UsinasApiBase):
+    """Parâmetros estranhos na URL respondem 400 (ou são ignorados), nunca erro 500."""
+
+    def test_parametros_invalidos(self):
+        self.entrar(self.admin)
+        base = f'/api/usinas/{self.minha.pk}'
+        self.assertEqual(self.client.get(f'{base}/geracao-mensal/?meses=abc').status_code, 200)
+        self.assertEqual(self.client.get(f'{base}/curva/?data=9999-12-31').status_code, 400)
+        self.assertEqual(self.client.get(f'{base}/geracao-diaria/?fim=0001-01-05').status_code, 400)
+        self.assertEqual(self.client.get('/api/dashboard/curva/?data=1-1-1').status_code, 400)
+        self.assertEqual(self.client.get('/api/alertas/?usina=abc').status_code, 200)
 
 
 class ApagarUsinaApiTests(UsinasApiBase):

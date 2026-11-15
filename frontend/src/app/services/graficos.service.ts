@@ -5,7 +5,8 @@ import { BarChart, LineChart } from 'echarts/charts';
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { TemaService } from './tema.service';
-import { MesGeracao, PontoCurva } from './usinas.service';
+import { diaMesBR } from './periodo';
+import { DiaGeracao, MesGeracao, PontoCurva } from './usinas.service';
 
 // Só os módulos usados entram no pacote (tree-shaking)
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -18,6 +19,8 @@ interface Cores {
 }
 
 const AREA_ACENTO = 'rgba(239, 150, 0, 0.10)';
+
+const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
 export const numeroBR = (v: number, casas = 0) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -57,6 +60,61 @@ export class GraficosService {
     };
   }
 
+  /**
+   * Energia por dia de um período: uma barra por dia + linha do esperado do dia (esperado do mês ÷ dias do mês).
+   * Hoje (em andamento) mais claro; dia sem dados fica vazio.
+   */
+  geracaoDiaria(dias: DiaGeracao[], hoje: string): EChartsCoreOption {
+    const c = this.cores();
+    const b = this.base(c);
+    const temEsperado = dias.some(d => d.esperado_kwh);
+    return {
+      ...b.comum,
+      grid: { ...b.comum.grid, top: 44 },
+      legend: {
+        top: 0, right: 0, itemWidth: 14, itemHeight: 8, itemGap: 16,
+        textStyle: { color: c.secundario, fontSize: 12, fontFamily: 'Inter' },
+        data: [
+          { name: 'Gerado', icon: 'roundRect' },
+          ...(temEsperado ? [{ name: 'Esperado', icon: 'path://M0,4 L14,4 L14,6 L0,6 Z' }] : []),
+        ],
+      },
+      tooltip: {
+        ...b.tooltip, trigger: 'axis',
+        axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(239,150,0,0.06)' } },
+        formatter: (p: { dataIndex: number }[]) => {
+          const d = dias[p[0].dataIndex];
+          const semana = SEMANA[new Date(`${d.data}T12:00:00`).getDay()];
+          const titulo = `<span style="color:${c.secundario}">${semana}, ${diaMesBR(d.data)}/${d.data.slice(0, 4)}` +
+            `${d.data === hoje ? ' · em andamento' : ''}</span><br>`;
+          let html = titulo + `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c.acento};margin-right:6px"></span>` +
+            (d.kwh === null ? 'Sem dados' : `Gerado <b>${numeroBR(d.kwh, 1)} kWh</b>`);
+          if (d.esperado_kwh) {
+            html += `<br><span style="display:inline-block;width:10px;height:2px;background:${c.referencia};margin:0 4px 3px 0"></span>` +
+              `Esperado <b>${numeroBR(d.esperado_kwh, 1)} kWh</b>`;
+            if (d.kwh !== null && d.data !== hoje) {
+              html += `<br><span style="color:${c.secundario}">${numeroBR(d.kwh / d.esperado_kwh * 100)}% do esperado</span>`;
+            }
+          }
+          return html;
+        },
+      },
+      xAxis: { type: 'category', data: dias.map(d => diaMesBR(d.data)), ...b.eixoX },
+      yAxis: this.eixoY(b, c, 'kWh'),
+      series: [{
+        name: 'Gerado', type: 'bar', barMaxWidth: 24, cursor: 'pointer',
+        itemStyle: { color: c.acento, borderRadius: [4, 4, 0, 0] },
+        data: dias.map(d => (d.data === hoje && d.kwh !== null ? { value: d.kwh, itemStyle: { opacity: 0.45 } } : d.kwh)),
+        emphasis: { disabled: true },
+      },
+      ...(temEsperado ? [{
+        name: 'Esperado', type: 'line', step: 'middle', data: dias.map(d => d.esperado_kwh),
+        symbol: 'none', lineStyle: { width: 2, color: c.referencia }, itemStyle: { color: c.referencia },
+        emphasis: { disabled: true },
+      }] : [])],
+    };
+  }
+
   /** Geração mensal: barras (gerado) + linha de referência (esperado). Mês atual mais claro. */
   geracaoMensal(meses: MesGeracao[], unidade: 'kWh' | 'MWh' = 'kWh'): EChartsCoreOption {
     const c = this.cores();
@@ -85,8 +143,13 @@ export class GraficosService {
             `Gerado <b>${numeroBR(m.gerado_kwh / div, casas)} ${unidade}</b>`;
           if (m.esperado_kwh > 0) {
             html += `<br><span style="display:inline-block;width:10px;height:2px;background:${c.referencia};margin:0 4px 3px 0"></span>` +
-              `Esperado <b>${numeroBR(m.esperado_kwh / div, casas)} ${unidade}</b><br>` +
-              `<span style="color:${c.secundario}">${numeroBR(m.gerado_kwh / m.esperado_kwh * 100)}% do esperado</span>`;
+              `Esperado${m.parcial ? ' no mês' : ''} <b>${numeroBR(m.esperado_kwh / div, casas)} ${unidade}</b>`;
+            if (m.parcial) {
+              // Mês em andamento: compara com o esperado até hoje, não com o mês inteiro
+              html += `<br>Esperado até hoje <b>${numeroBR(m.esperado_ate_hoje_kwh / div, casas)} ${unidade}</b>`;
+            }
+            html += `<br><span style="color:${c.secundario}">${numeroBR(m.gerado_kwh / m.esperado_ate_hoje_kwh * 100)}% ` +
+              `do esperado${m.parcial ? ' até hoje' : ''}</span>`;
           }
           return html;
         },

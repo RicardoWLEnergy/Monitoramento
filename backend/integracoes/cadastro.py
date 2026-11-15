@@ -218,7 +218,11 @@ def _cadastrar_huawei(sn: str, cliente: Usuario) -> ResultadoCadastro:
         saude = (api.tempo_real_usinas([codigo]) or [{}])[0].get('dataItemMap', {}).get('real_health_state')
     except HuaweiErro:
         saude = None
-    status = STATUS_SAUDE_HUAWEI.get(int(saude) if saude is not None else 0, Status.OFFLINE)
+    try:
+        saude = int(float(saude)) if saude is not None else 0
+    except (TypeError, ValueError):
+        saude = 0
+    status = STATUS_SAUDE_HUAWEI.get(saude, Status.OFFLINE)
 
     def coordenada(valor):
         try:

@@ -20,8 +20,11 @@ from monitoramento.particoes import criar_particoes
 from usinas.models import Plataforma, Status, Usina
 
 from .cadastro import status_da_usina
-from .coleta import Relatorio, _gravar_dias, _meses_do_periodo, _numero, arredondar_5min, e_noite, limite_curvas
-from .huawei import HuaweiCliente, HuaweiErro
+from .coleta import (
+    Relatorio, _desde_a_primeira_geracao, _gravar_dias, _meses_do_periodo, _numero, amostra_por_bloco,
+    arredondar_5min, e_noite, leitura_recente, limite_curvas, sem_comunicacao,
+)
+from .huawei import HuaweiCliente, HuaweiErro, HuaweiLoginErro
 
 ESTADOS_ONLINE = {512, 513, 514}      # conectado à rede (inclusive com limitação)
 ESTADOS_FALHA = {768, 770}            # desligado por falha / por proteção da rede
@@ -64,46 +67,53 @@ def atualizar_tempo_real(usinas=None, api: HuaweiCliente | None = None) -> Relat
     qs = usinas if usinas is not None else Usina.objects.all()
     usinas = list(qs.ativas().filter(plataforma=Plataforma.HUAWEI).prefetch_related('inversores'))
     inversores = [inv for u in usinas for inv in u.inversores.all()]
-    fusos = {inv.numero_serie: u.fuso_horario for u in usinas for inv in u.inversores.all()}
     if not inversores:
         return rel
     api = api or cliente_huawei()
 
     dados: dict[str, dict] = {}
     for tipo, grupo in _por_tipo(inversores).items():
-        for item in api.tempo_real_dispositivos([i.id_externo for i in grupo], tipo):
-            dados[str(item.get('devId'))] = item.get('dataItemMap') or {}
+        try:
+            for item in api.tempo_real_dispositivos([i.id_externo for i in grupo], tipo) or []:
+                dados[str(item.get('devId'))] = item.get('dataItemMap') or {}
+        except HuaweiLoginErro:
+            raise
+        except HuaweiErro as erro:   # um tipo de inversor com erro não derruba os outros
+            rel.falhas.append(f'tipo {tipo}: {erro}')
 
     agora = timezone.now()   # a Huawei não informa o horário da leitura
     criar_particoes()
-    with transaction.atomic():
-        for inv in inversores:
-            d = dados.get(inv.id_externo)
-            if d is None:
-                rel.falhas.append(f'{inv.numero_serie}: sem resposta no tempo real')
-                continue
-            inv.potencia_atual_kw = round(_numero(d.get('active_power')), 3)   # kW (a confirmar de dia)
-            inv.geracao_hoje_kwh = round(_numero(d.get('day_cap')), 3)
-            inv.status = _status_inversor(d, e_noite(agora, fusos[inv.numero_serie]))
-            if _numero(d.get('run_state')) == 1:   # 1 = comunicando
-                inv.ultima_leitura = agora
-            inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])
-            rel.inversores += 1
+    for usina in usinas:
+        lista = list(usina.inversores.all())
+        with transaction.atomic():
+            for inv in lista:
+                d = dados.get(inv.id_externo)
+                if d is None:
+                    rel.falhas.append(f'{inv.numero_serie}: sem resposta no tempo real')
+                if d is not None and _numero(d.get('run_state')) == 1:   # 1 = comunicando
+                    inv.potencia_atual_kw = round(_numero(d.get('active_power')), 3)
+                    inv.geracao_hoje_kwh = round(_numero(d.get('day_cap')), 3)
+                    inv.status = _status_inversor(d, e_noite(agora, usina.fuso_horario))
+                    inv.ultima_leitura = agora
+                elif not leitura_recente(inv.ultima_leitura, usina, agora):
+                    sem_comunicacao(inv, usina, agora)   # parou de comunicar há mais que o prazo
+                inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])
+                rel.inversores += 1
 
-        for usina in usinas:
-            lista = list(usina.inversores.all())
             comunicando = [i for i in lista if i.ultima_leitura == agora]
             usina.status = status_da_usina([i.status for i in lista])
             if comunicando:
                 usina.ultima_leitura = agora
+                fuso = ZoneInfo(usina.fuso_horario)
+                hoje = agora.astimezone(fuso).date()
                 Leitura.objects.bulk_create(
                     [Leitura(usina=usina, data_hora=arredondar_5min(agora),
                              potencia_kw=round(sum(float(i.potencia_atual_kw) for i in lista), 3))],
                     update_conflicts=True, unique_fields=['usina', 'data_hora'], update_fields=['potencia_kw'],
                 )
                 rel.leituras += 1
-                hoje = agora.astimezone(ZoneInfo(usina.fuso_horario)).date()
-                _gravar_dias(usina, {hoje: sum(float(i.geracao_hoje_kwh) for i in lista)})
+                _gravar_dias(usina, {hoje: sum(float(i.geracao_hoje_kwh) for i in lista if i.ultima_leitura
+                                               and i.ultima_leitura.astimezone(fuso).date() == hoje)})
             usina.save(update_fields=['status', 'ultima_leitura', 'atualizado_em'])
     return rel
 
@@ -123,6 +133,8 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: HuaweiCl
         meio_do_mes = datetime(ano, mes, 15, 12, tzinfo=fuso)
         try:
             registros = api.kpi_diario([usina.id_externo], meio_do_mes)
+        except HuaweiLoginErro:
+            raise                      # sem login não adianta tentar os outros meses
         except HuaweiErro as erro:
             rel.falhas.append(f'{mes:02d}/{ano}: {erro}')
             continue
@@ -133,9 +145,9 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: HuaweiCl
             if inicio <= dia <= fim and valor is not None:
                 por_dia[dia] = _numero(valor)
 
-    com_geracao = sorted(d for d, kwh in por_dia.items() if kwh > 0)
-    if com_geracao:
-        rel.dias = _gravar_dias(usina, {d: kwh for d, kwh in por_dia.items() if d >= com_geracao[0]})
+    por_dia = _desde_a_primeira_geracao(usina, por_dia)
+    if por_dia:
+        rel.dias = _gravar_dias(usina, por_dia)
     return rel
 
 
@@ -151,7 +163,9 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: HuaweiCliente | 
     criar_particoes(meses_antes=settings.LEITURAS_RETENCAO_MESES - 1)
     grupos = _por_tipo(usina.inversores.all())
 
-    soma: dict[datetime, float] = defaultdict(float)
+    # Amostras de cada inversor (todas as janelas); só no fim escolhe uma por bloco e soma os inversores
+    por_inversor: dict[str, list] = defaultdict(list)
+    dias_com_falha: set[date] = set()
     janela = inicio
     while janela <= fim:
         ate = min(janela + timedelta(days=2), fim)
@@ -160,23 +174,39 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: HuaweiCliente | 
         for tipo, grupo in grupos.items():
             try:
                 registros = api.historico_dispositivos([i.id_externo for i in grupo], tipo, comeco, final)
+            except HuaweiLoginErro:
+                raise
             except HuaweiErro as erro:
+                dias_da_janela = {janela + timedelta(days=n) for n in range((ate - janela).days + 1)}
                 if erro.codigo == 401:
                     rel.falhas.append('Curva de 5 min não liberada na conta Northbound: habilite os dados '
                                       'históricos dos inversores (String e Residencial) no portal FusionSolar.')
-                    return _gravar_curva(usina, soma, rel)
+                    return _gravar_curva(usina, por_inversor, rel, dias_com_falha | dias_da_janela)
                 rel.falhas.append(f'{janela:%d/%m}–{ate:%d/%m}: {erro}')
-                if erro.e_limite:
-                    return _gravar_curva(usina, soma, rel)   # cota do dia acabou: grava o que veio
+                dias_com_falha |= dias_da_janela
+                if erro.e_limite:   # cota do dia acabou: grava o que veio
+                    return _gravar_curva(usina, por_inversor, rel, dias_com_falha)
                 continue
             for r in registros:
                 momento = datetime.fromtimestamp(int(r.get('collectTime') or 0) / 1000, tz=fuso)
-                soma[arredondar_5min(momento)] += _numero((r.get('dataItemMap') or {}).get('active_power'))
+                por_inversor[str(r.get('devId'))].append(
+                    (momento, _numero((r.get('dataItemMap') or {}).get('active_power'))))
         janela = ate + timedelta(days=1)
-    return _gravar_curva(usina, soma, rel)
+    return _gravar_curva(usina, por_inversor, rel, dias_com_falha)
 
 
-def _gravar_curva(usina: Usina, soma: dict[datetime, float], rel: Relatorio) -> Relatorio:
+def _gravar_curva(usina: Usina, por_inversor: dict[str, list], rel: Relatorio,
+                  dias_com_falha: set[date] = frozenset()) -> Relatorio:
+    """
+    Uma amostra REAL por bloco para cada inversor (sem somar amostras do mesmo); depois soma os inversores.
+    Dias em que algum grupo de inversores falhou não são gravados (a soma ficaria menor que a real).
+    """
+    fuso = ZoneInfo(usina.fuso_horario)
+    soma: dict[datetime, float] = defaultdict(float)
+    for pontos in por_inversor.values():
+        for bloco, valor in amostra_por_bloco(pontos).items():
+            if bloco.astimezone(fuso).date() not in dias_com_falha:
+                soma[bloco] += valor
     if soma:
         Leitura.objects.bulk_create(
             [Leitura(usina=usina, data_hora=m, potencia_kw=round(kw, 3)) for m, kw in soma.items()],

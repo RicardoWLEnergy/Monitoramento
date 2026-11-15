@@ -25,6 +25,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:8001:8000"                         # SÓ dentro do servidor: painel /admin por túnel SSH
     depends_on:
       db: { condition: service_healthy }              # só sobe depois do banco estar pronto
     restart: unless-stopped
@@ -57,6 +59,8 @@ services:
     restart: unless-stopped
 
   # ---------- Backup diário do banco (mantém os últimos 14 dias) ----------
+  # Arquivos só para o dono (umask 077): contêm senhas (hash), CPF e WhatsApp dos clientes.
+  # Falha aparece em "docker compose logs backup" como "BACKUP FALHOU".
   backup:
     image: postgres:17-alpine
     environment:
@@ -64,8 +68,9 @@ services:
     volumes:
       - ./backups:/backups                            # pasta "backups" ao lado deste arquivo
     entrypoint: >
-      sh -c 'while true; do
-        pg_dump -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -F c -f /backups/monitoramento-$$(date +%F).dump;
+      sh -c 'umask 077; while true; do
+        pg_dump -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB} -F c -f /backups/monitoramento-$$(date +%F).dump
+          || echo "BACKUP FALHOU em $$(date)";
         find /backups -name "*.dump" -mtime +14 -delete;
         sleep 86400;
       done'

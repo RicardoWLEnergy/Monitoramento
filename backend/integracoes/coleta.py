@@ -4,7 +4,6 @@ Coleta de dados das usinas cadastradas (FoxESS).
 - atualizar_tempo_real(): potência atual, energia de hoje e estado de cada inversor
 - importar_geracao_diaria(): energia de cada dia de um período (relatório mensal da FoxESS)
 - importar_curvas(): potência a cada 5 min de um período (histórico da FoxESS, 1 dia por chamada)
-- importar_periodo(): tudo acima de uma vez (botão "Importar histórico" e comando)
 - cobertura(): o que já existe no banco para uma usina
 
 Tudo pode ser repetido sem duplicar: leituras e dias já gravados são atualizados.
@@ -64,6 +63,21 @@ def arredondar_5min(momento: datetime) -> datetime:
     return base.replace(minute=0) + timedelta(minutes=round(minutos / 5) * 5)
 
 
+def amostra_por_bloco(pontos: list[tuple[datetime, float]]) -> dict[datetime, float]:
+    """
+    Pontos de UM inversor → um valor por bloco de 5 min: a amostra REAL mais próxima do horário
+    do bloco (sem somar nem tirar média), para bater com o portal do fabricante.
+    Ex.: 06:28:40 (5,0 kW) e 06:32:10 (6,2 kW) caem no bloco 06:30 → fica 5,0 kW.
+    """
+    melhor: dict[datetime, tuple[float, float]] = {}
+    for momento, valor in pontos:
+        bloco = arredondar_5min(momento)
+        distancia = abs((momento - bloco).total_seconds())
+        if bloco not in melhor or distancia < melhor[bloco][0]:
+            melhor[bloco] = (distancia, valor)
+    return {bloco: valor for bloco, (_, valor) in melhor.items()}
+
+
 def _numero(valor) -> float:
     try:
         return float(valor)
@@ -100,53 +114,87 @@ def _usinas_foxess(usinas=None):
 # ----------------------------------------------------------------------------
 # Tempo real
 # ----------------------------------------------------------------------------
+def sem_comunicacao(inv: Inversor, usina: Usina, agora: datetime) -> None:
+    """
+    Inversor sem leitura recente (mais velha que "considerar offline após"): não mantém a última
+    potência congelada. Potência vai a zero; a energia de hoje só fica se a última leitura for de hoje.
+    Status: "Sem sol" à noite (e no começo da manhã, enquanto o inversor ainda não acordou), senão offline.
+    """
+    fuso = ZoneInfo(usina.fuso_horario)
+    inv.potencia_atual_kw = 0
+    if not inv.ultima_leitura or inv.ultima_leitura.astimezone(fuso).date() != agora.astimezone(fuso).date():
+        inv.geracao_hoje_kwh = 0
+    hora = agora.astimezone(fuso).hour
+    acordando = FIM_NOITE <= hora < FIM_NOITE + 2 and inv.status == Status.NOITE
+    inv.status = Status.NOITE if e_noite(agora, usina.fuso_horario) or acordando else Status.OFFLINE
+
+
+def leitura_recente(momento: datetime | None, usina: Usina, agora: datetime) -> bool:
+    """Leitura dentro do prazo "considerar offline após" (e sem relógio adiantado do inversor)."""
+    if momento is None or momento > agora + timedelta(hours=1):
+        return False
+    return agora - momento <= timedelta(minutes=usina.minutos_sem_comunicacao or 60)
+
+
 def atualizar_tempo_real(usinas=None, api: FoxESSCliente | None = None) -> Relatorio:
     """Atualiza inversores e usinas; grava a leitura atual e a energia de hoje."""
     api = api or cliente_foxess()
     rel = Relatorio()
     usinas = list(_usinas_foxess(usinas))
-    inversores = {inv.numero_serie: inv for u in usinas for inv in u.inversores.all()}
-    fuso_do_inversor = {inv.numero_serie: u.fuso_horario for u in usinas for inv in u.inversores.all()}
-    if not inversores:
+    numeros = sorted(inv.numero_serie for u in usinas for inv in u.inversores.all())
+    if not numeros:
         return rel
 
-    dados = {d['deviceSN']: d for d in api.tempo_real(sorted(inversores))}
+    dados = {d.get('deviceSN'): d for d in api.tempo_real(numeros) or [] if d}
     criar_particoes()   # garante a gaveta do mês atual
+    agora = timezone.now()
 
-    with transaction.atomic():
-        for sn, inv in inversores.items():
-            d = dados.get(sn)
-            if not d:
-                rel.falhas.append(f'{sn}: sem resposta no tempo real')
-                continue
-            v = {item['variable']: item.get('value') for item in d.get('datas', [])}
+    for usina in usinas:
+        try:
+            with transaction.atomic():   # uma usina com problema não desfaz as outras
+                _tempo_real_da_usina(usina, dados, agora, rel)
+        except Exception as erro:   # noqa: BLE001
+            rel.falhas.append(f'{usina.nome}: {erro}')
+    return rel
+
+
+def _tempo_real_da_usina(usina: Usina, dados: dict, agora: datetime, rel: Relatorio) -> None:
+    lista = list(usina.inversores.all())
+    for inv in lista:
+        d = dados.get(inv.numero_serie)
+        if not d:
+            rel.falhas.append(f'{inv.numero_serie}: sem resposta no tempo real')
+        momento = horario_foxess(d.get('time')) if d else None
+        if d and leitura_recente(momento, usina, agora):
+            v = {item.get('variable'): item.get('value') for item in d.get('datas') or [] if item}
             potencia = _numero(v.get('generationPower'))
             inv.potencia_atual_kw = round(potencia, 3)
             inv.geracao_hoje_kwh = round(_numero(v.get('todayYield')), 3)
-            momento = horario_foxess(d.get('time'))
-            noite = e_noite(momento or timezone.now(), fuso_do_inversor[sn])
-            inv.status = _status_inversor(v.get('runningState'), potencia, noite)
-            inv.ultima_leitura = momento or inv.ultima_leitura
-            inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])
-            rel.inversores += 1
+            inv.status = _status_inversor(v.get('runningState'), potencia, e_noite(momento, usina.fuso_horario))
+            inv.ultima_leitura = momento
+        else:
+            sem_comunicacao(inv, usina, agora)
+        inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])
+        rel.inversores += 1
 
-        for usina in usinas:
-            lista = [inversores[i.numero_serie] for i in usina.inversores.all()]
-            horarios = [i.ultima_leitura for i in lista if i.ultima_leitura]
-            usina.status = status_da_usina([i.status for i in lista])
-            usina.ultima_leitura = max(horarios) if horarios else usina.ultima_leitura
-            usina.save(update_fields=['status', 'ultima_leitura', 'atualizado_em'])
+    usina.status = status_da_usina([i.status for i in lista])
+    recentes = [i.ultima_leitura for i in lista if leitura_recente(i.ultima_leitura, usina, agora)]
+    if recentes:
+        usina.ultima_leitura = max(recentes)
+    usina.save(update_fields=['status', 'ultima_leitura', 'atualizado_em'])
 
-            if horarios:
-                agora = arredondar_5min(max(horarios))
-                Leitura.objects.bulk_create(
-                    [Leitura(usina=usina, data_hora=agora, potencia_kw=round(sum(float(i.potencia_atual_kw) for i in lista), 3))],
-                    update_conflicts=True, unique_fields=['usina', 'data_hora'], update_fields=['potencia_kw'],
-                )
-                rel.leituras += 1
-                hoje = max(horarios).astimezone(ZoneInfo(usina.fuso_horario)).date()
-                _gravar_dias(usina, {hoje: sum(float(i.geracao_hoje_kwh) for i in lista)})
-    return rel
+    if recentes:
+        fuso = ZoneInfo(usina.fuso_horario)
+        hoje = max(recentes).astimezone(fuso).date()
+        Leitura.objects.bulk_create(
+            [Leitura(usina=usina, data_hora=arredondar_5min(max(recentes)),
+                     potencia_kw=round(sum(float(i.potencia_atual_kw) for i in lista), 3))],
+            update_conflicts=True, unique_fields=['usina', 'data_hora'], update_fields=['potencia_kw'],
+        )
+        rel.leituras += 1
+        # Energia de hoje: só inversores com leitura de hoje (valor de ontem não entra)
+        _gravar_dias(usina, {hoje: sum(float(i.geracao_hoje_kwh) for i in lista
+                                       if i.ultima_leitura and i.ultima_leitura.astimezone(fuso).date() == hoje)})
 
 
 # ----------------------------------------------------------------------------
@@ -159,6 +207,23 @@ def _meses_do_periodo(inicio: date, fim: date) -> list[tuple[int, int]]:
         meses.append((atual.year, atual.month))
         atual = date(atual.year + (atual.month == 12), atual.month % 12 + 1, 1)
     return meses
+
+
+def _desde_a_primeira_geracao(usina: Usina, por_dia: dict[date, float]) -> dict[date, float]:
+    """
+    Descarta os zeros de ANTES da usina começar a gerar (antes de existir), mas mantém os zeros
+    depois disso (dias parados são informação). A 1ª geração considera o que já está no banco,
+    porque a importação vem em pedaços (1 mês por vez).
+    """
+    candidatos = [d for d, kwh in por_dia.items() if kwh > 0]
+    primeira_no_banco = (GeracaoDiaria.objects.filter(usina=usina, energia_kwh__gt=0)
+                         .aggregate(primeira=Min('data'))['primeira'])
+    if primeira_no_banco:
+        candidatos.append(primeira_no_banco)
+    if not candidatos:
+        return {}
+    corte = min(candidatos)
+    return {d: kwh for d, kwh in por_dia.items() if d >= corte}
 
 
 def _gravar_dias(usina: Usina, energia_por_dia: dict[date, float]) -> int:
@@ -174,6 +239,7 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: FoxESSCl
     rel = Relatorio()
     fim = min(fim, timezone.localdate())
     por_dia: dict[date, float] = defaultdict(float)
+    meses_com_falha: set[tuple[int, int]] = set()
 
     for inv in usina.inversores.all():
         for ano, mes in _meses_do_periodo(inicio, fim):
@@ -181,6 +247,7 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: FoxESSCl
                 resposta = api.relatorio_mensal(inv.numero_serie, ano, mes)
             except FoxESSErro as erro:
                 rel.falhas.append(f'{inv.numero_serie} {mes:02d}/{ano}: {erro}')
+                meses_com_falha.add((ano, mes))
                 continue
             valores = next((r.get('values') or [] for r in resposta or [] if r.get('variable') == 'generation'), [])
             for indice, kwh in enumerate(valores):
@@ -191,10 +258,11 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: FoxESSCl
                 if inicio <= dia <= fim:
                     por_dia[dia] += _numero(kwh)
 
-    # Ignora os zeros antes do primeiro dia com geração (antes da usina existir)
-    com_geracao = sorted(d for d, kwh in por_dia.items() if kwh > 0)
-    if com_geracao:
-        por_dia = {d: kwh for d, kwh in por_dia.items() if d >= com_geracao[0]}
+    # Mês em que algum inversor falhou não é gravado: a soma sem ele ficaria menor que a real
+    # e apagaria o valor certo já guardado (tenta de novo na próxima rotina/importação)
+    por_dia = {d: kwh for d, kwh in por_dia.items() if (d.year, d.month) not in meses_com_falha}
+    por_dia = _desde_a_primeira_geracao(usina, por_dia)
+    if por_dia:
         rel.dias = _gravar_dias(usina, por_dia)
     return rel
 
@@ -221,20 +289,26 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: FoxESSCliente | 
     while dia >= inicio:
         comeco = datetime(dia.year, dia.month, dia.day, tzinfo=fuso)
         soma: dict[datetime, float] = defaultdict(float)
+        falhou = False
         for inv in usina.inversores.all():
             try:
                 resposta = api.historico(inv.numero_serie, comeco, comeco + timedelta(days=1))
             except FoxESSErro as erro:
                 rel.falhas.append(f'{inv.numero_serie} {dia:%d/%m}: {erro}')
+                falhou = True
                 continue
+            pontos = []
             for serie in (resposta or [{}])[0].get('datas', []):
                 if serie.get('variable') != 'generationPower':
                     continue
                 for ponto in serie.get('data') or []:
                     momento = horario_foxess(ponto.get('time'))
                     if momento:
-                        soma[arredondar_5min(momento)] += _numero(ponto.get('value'))
-        if soma:
+                        pontos.append((momento, _numero(ponto.get('value'))))
+            # Uma amostra real por bloco para ESTE inversor; depois soma os inversores da usina
+            for bloco, valor in amostra_por_bloco(pontos).items():
+                soma[bloco] += valor
+        if soma and not falhou:          # dia com inversor faltando não substitui a curva já guardada
             Leitura.objects.bulk_create(
                 [Leitura(usina=usina, data_hora=m, potencia_kw=round(kw, 3)) for m, kw in soma.items()],
                 update_conflicts=True, unique_fields=['usina', 'data_hora'], update_fields=['potencia_kw'],
@@ -246,32 +320,8 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: FoxESSCliente | 
 
 
 # ----------------------------------------------------------------------------
-# Período completo (usado pelo botão "Importar histórico" e pelo comando)
+# Cobertura (o que já existe no banco)
 # ----------------------------------------------------------------------------
-def importar_periodo(usina: Usina, inicio: date, fim: date, curvas: bool = True) -> dict:
-    """Tempo real + energia diária + (opcional) curvas do período, na plataforma da usina. Devolve um resumo."""
-    if usina.plataforma == Plataforma.FOXESS:
-        api = cliente_foxess()
-        modulo_tempo_real, modulo_diaria, modulo_curvas = atualizar_tempo_real, importar_geracao_diaria, importar_curvas
-    elif usina.plataforma == Plataforma.HUAWEI:
-        from . import coleta_huawei   # import aqui: coleta_huawei também importa deste módulo
-        api = coleta_huawei.cliente_huawei()
-        modulo_tempo_real = coleta_huawei.atualizar_tempo_real
-        modulo_diaria, modulo_curvas = coleta_huawei.importar_geracao_diaria, coleta_huawei.importar_curvas
-    else:
-        raise ValueError(f'Plataforma sem importação de histórico: {usina.plataforma}')
-
-    modulo_tempo_real(Usina.objects.filter(pk=usina.pk), api=api)
-    diaria = modulo_diaria(usina, inicio, fim, api=api)
-    curva = modulo_curvas(usina, inicio, fim, api=api) if curvas else Relatorio()
-    return {
-        'dias_energia': diaria.dias,
-        'dias_curva': curva.dias,
-        'leituras': curva.leituras,
-        'falhas': (diaria.falhas + curva.falhas)[:20],
-    }
-
-
 def cobertura(usina: Usina) -> dict:
     """O que já existe no banco para a usina (para saber o que falta importar)."""
     dias = GeracaoDiaria.objects.filter(usina=usina).aggregate(inicio=Min('data'), fim=Max('data'), total=Count('data'))
