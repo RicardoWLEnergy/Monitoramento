@@ -283,3 +283,12 @@ lucide-icon { display: inline-flex; flex: none; }
 .aba.ativa { color: var(--txt); border-bottom-color: var(--wl-orange); }
 
 select.input { appearance: auto; }
+
+/* ---------- Marcador de etapa (Meu projeto): chanfrado; laranja = feito, preto = agora, vazado = falta ---------- */
+.marcador-etapa {
+  display: grid; place-items: center; flex: none; width: var(--m, 46px); height: var(--m, 46px);
+  font: 700 16px var(--font-display); clip-path: polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+.marcador-etapa.concluida { background: var(--wl-orange); color: var(--wl-black); }
+.marcador-etapa.andamento { background: var(--txt); color: var(--wl-orange); }
+.marcador-etapa.proxima { background: var(--card); color: var(--wl-gray-500); box-shadow: inset 0 0 0 2px var(--hairline); }

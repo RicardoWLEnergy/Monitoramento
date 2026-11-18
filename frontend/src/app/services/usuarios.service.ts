@@ -6,6 +6,8 @@ import { Pagina, Plataforma } from './usinas.service';
 
 export interface UsuarioCadastro {
   id: number;
+  /** Nº da obra (chave da planilha OBRAS, CRM...). */
+  id_cliente: string | null;
   email: string;
   nome: string;
   whatsapp: string | null;
@@ -25,6 +27,7 @@ export interface UsuarioCadastro {
 export interface NovoUsuario {
   email: string;
   nome: string;
+  id_cliente?: string;
   whatsapp?: string;
   cpf?: string;
   endereco?: string;

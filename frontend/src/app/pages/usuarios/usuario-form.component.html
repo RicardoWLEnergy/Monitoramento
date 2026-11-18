@@ -16,6 +16,10 @@
       <input class="input" name="nome" [(ngModel)]="form.nome" required></label>
     <label class="campo"><span class="label">E-mail *</span>
       <input class="input" type="email" name="email" [(ngModel)]="form.email" required></label>
+    @if (eCliente) {
+      <label class="campo"><span class="label">ID do cliente</span>
+        <input class="input num" name="id_cliente" [(ngModel)]="form.id_cliente" placeholder="Nº da obra"></label>
+    }
     <label class="campo"><span class="label">CPF</span>
       <input class="input num" name="cpf" [(ngModel)]="form.cpf" placeholder="000.000.000-00"></label>
     <label class="campo"><span class="label">WhatsApp</span>

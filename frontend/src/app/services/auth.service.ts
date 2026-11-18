@@ -6,6 +6,7 @@ export type Perfil = 'admin' | 'colaborador' | 'cliente';
 
 export interface Usuario {
   id: number;
+  id_cliente: string | null;
   email: string;
   nome: string;
   whatsapp: string | null;

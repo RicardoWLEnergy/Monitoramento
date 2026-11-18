@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs';
 import {
-  Building2, LayoutDashboard, LucideAngularModule, LucideIconData,
+  Building2, LayoutDashboard, ListChecks, LucideAngularModule, LucideIconData,
   Menu, Moon, PanelLeftClose, SolarPanel, Sun, Users,
 } from 'lucide-angular';
 import { AuthService } from '../../services/auth.service';
@@ -10,7 +10,9 @@ import { TemaService } from '../../services/tema.service';
 import { LogoComponent } from './logo.component';
 import { MenuContaComponent } from './menu-conta.component';
 
-interface ItemMenu { rota: string; rotulo: string; icone: LucideIconData; soAdmin?: boolean; soEquipe?: boolean; }
+interface ItemMenu {
+  rota: string; rotulo: string; icone: LucideIconData; soAdmin?: boolean; soEquipe?: boolean; soCliente?: boolean;
+}
 
 const CHAVE_RECOLHIDA = 'wl-sidebar-recolhida';
 
@@ -37,6 +39,7 @@ export class ShellComponent {
   readonly monitoramento: ItemMenu[] = [
     { rota: '/visao-geral', rotulo: 'Visão geral', icone: LayoutDashboard, soEquipe: true },
     { rota: '/usinas',      rotulo: 'Usinas',      icone: SolarPanel },
+    { rota: '/projeto',     rotulo: 'Meu projeto', icone: ListChecks, soCliente: true },
   ];
 
   /** Gestão: Admin e Colaborador veem Clientes; só o Admin vê Usuários. */

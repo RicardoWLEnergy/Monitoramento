@@ -1,0 +1,113 @@
+@let p = projeto();
+@if (auth.eEquipe()) {
+  <form class="consulta" (ngSubmit)="consultar()">
+    <span class="label">Ver o projeto de um cliente</span>
+    <input class="input num" name="id" [(ngModel)]="campoId" placeholder="ID do cliente (nº da obra)">
+    <button class="btn" type="submit">Ver projeto</button>
+  </form>
+}
+@if (carregando() && !p) {
+  <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
+} @else if (erro()) {
+  <div class="alerta erro">{{ erro() }} <a href="" (click)="$event.preventDefault(); carregar()">Tentar de novo →</a></div>
+} @else if (!p) {
+  <div class="vazio">
+    @if (auth.eEquipe()) {
+      @if (idConsulta()) { Nenhuma obra com o ID {{ idConsulta() }} na planilha. }
+      @else { Informe o ID do cliente para ver o projeto como ele vê. }
+    } @else {
+      O acompanhamento do seu projeto ainda não foi liberado.<br>
+      Assim que a equipe da W.L Energy concluir o seu cadastro, as etapas aparecem aqui.
+    }
+  </div>
+} @else {
+  <!-- ---------- Topo: a usina, a previsão e as etapas ---------- -->
+  <section class="faixa" aria-label="Andamento do projeto">
+    <div class="faixa-topo">
+      <div>
+        <div class="label">Projeto {{ p.id_cliente }}</div>
+        <h1>@if (p.potencia_kwp) { Sua usina de {{ p.potencia_kwp | number: '1.2-2' }} kWp } @else { Sua usina solar }</h1>
+        <p class="meta">
+          @if (p.cidade) {
+            <span><lucide-icon [img]="icones.MapPin" [size]="14" [strokeWidth]="1.7" /> {{ p.cidade }}{{ p.uf ? ' - ' + p.uf : '' }}</span>
+          }
+          @if (p.modulos) { <span class="num">{{ p.modulos }} módulos</span> }
+        </p>
+      </div>
+      <div class="prev">
+        <span class="label">{{ concluido() ? 'Projeto concluído' : 'Previsão de conclusão' }}</span>
+        <strong class="num">{{ p.previsao_conclusao ? dataBR(p.previsao_conclusao) : 'A definir' }}</strong>
+        <small>{{ faltam() }}</small>
+      </div>
+    </div>
+
+    @if (!celular()) {
+      <p class="placar">
+        <span><i></i><b>{{ concluidas() }} de {{ p.etapas.length }}</b> etapas concluídas</span>
+        @if (!concluido()) {
+          <span><i class="tracejado"></i><b>{{ p.etapas.length - concluidas() }}</b> até a usina ficar pronta</span>
+        }
+      </p>
+      <ol class="linha" role="tablist" aria-label="Etapas do projeto">
+        @for (e of p.etapas; track e.chave; let i = $index) {
+          <li [class]="e.status">
+            <button class="etapa" type="button" role="tab" [id]="'aba-' + i" aria-controls="painel-etapa"
+                    [attr.aria-selected]="escolhida() === i" [tabIndex]="escolhida() === i ? 0 : -1"
+                    (click)="escolher(i)" (keydown)="teclado($event, i)">
+              @if (e.status === 'andamento') { <span class="aqui">Você está aqui</span> }
+              <ng-container *ngTemplateOutlet="marcador; context: { e, i }" />
+              <span class="nome">{{ e.nome }}</span>
+              <span class="quando">{{ quando(e) }}</span>
+            </button>
+          </li>
+        }
+      </ol>
+    } @else {
+      <div class="resumo-movel">
+        <div class="segs">
+          @for (e of p.etapas; track e.chave) { <i><b [style.width.%]="avanco(e)"></b></i> }
+        </div>
+        @if (indiceAtual() >= 0) {
+          <p>Etapa <b>{{ indiceAtual() + 1 }} de {{ p.etapas.length }}</b>: {{ p.etapas[indiceAtual()].nome }}</p>
+        }
+      </div>
+    }
+  </section>
+
+  @if (!celular()) {
+    <!-- ---------- Painel da etapa escolhida ---------- -->
+    <section class="card painel" id="painel-etapa" role="tabpanel" [attr.aria-labelledby]="'aba-' + escolhida()">
+      <app-etapa-detalhe [etapa]="p.etapas[escolhida()]" [indice]="escolhida()" [total]="p.etapas.length"
+                         [idCliente]="idConsulta()" (ir)="escolher(escolhida() + $event)" />
+    </section>
+  } @else {
+    <!-- ---------- Celular: lista vertical; o detalhe abre embaixo da etapa tocada ---------- -->
+    <section class="card lista" aria-label="Etapas do projeto">
+      <ol class="vertical">
+        @for (e of p.etapas; track e.chave; let i = $index) {
+          @let aberto = escolhida() === i && aberta();
+          <li [class]="e.status">
+            <button class="item" type="button" [attr.aria-expanded]="aberto" (click)="tocar(i)">
+              <ng-container *ngTemplateOutlet="marcador; context: { e, i }" />
+              <span class="nome">{{ e.nome }}</span>
+              <span class="quando">{{ quando(e) }}</span>
+              @if (e.status === 'andamento') { <span class="aqui">Você está aqui</span> }
+              <lucide-icon class="seta" [class.virada]="aberto" [img]="icones.ChevronDown" [size]="18" [strokeWidth]="1.8" />
+            </button>
+            @if (aberto) {
+              <app-etapa-detalhe class="item-det" [etapa]="e" [indice]="i" [total]="p.etapas.length" [compacto]="true"
+                                 [idCliente]="idConsulta()" />
+            }
+          </li>
+        }
+      </ol>
+    </section>
+  }
+}
+
+<ng-template #marcador let-e="e" let-i="i">
+  <span class="marcador-etapa" [class]="e.status">
+    @if (e.status === 'concluida') { <lucide-icon [img]="icones.Check" [size]="18" [strokeWidth]="2.6" /> }
+    @else { {{ i + 1 }} }
+  </span>
+</ng-template>

@@ -210,3 +210,43 @@ class UsuariosApiTests(ApiBase):
         r = self.client.post(f'/api/usuarios/{self.cliente.pk}/vincular-inversor/', {'plataforma': 'foxess', 'sn': 'SN9'})
         self.assertEqual(r.status_code, 400)
         self.assertIn('não encontrado', r.data['detail'])
+
+
+class IdClienteApiTests(ApiBase):
+    """ID do cliente (nº da obra): chave da planilha OBRAS; único; só a equipe define."""
+
+    def test_equipe_cadastra_cliente_sem_usina_com_id(self):
+        self.entrar(self.colab)
+        r = self.client.post('/api/usuarios/', {'nome': 'Ana', 'email': 'ana@x.com', 'id_cliente': ' 1234 ',
+                                                'senha': 'Senha-Forte-123', 'perfil': 'cliente'}, format='json')
+        self.assertEqual(r.status_code, 201)
+        ana = Usuario.objects.get(email='ana@x.com')
+        self.assertEqual((ana.id_cliente, ana.usinas.count()), ('1234', 0))   # cliente sem usina
+
+    def test_id_repetido_e_recusado_e_vazio_vira_sem_id(self):
+        self.cliente.id_cliente = '1234'
+        self.cliente.save()
+        self.entrar(self.admin)
+        r = self.client.post('/api/usuarios/', {'nome': 'Bia', 'email': 'bia@x.com', 'id_cliente': '1234'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('id_cliente', r.data)
+        for email in ('c1@x.com', 'c2@x.com'):   # vários clientes sem ID não conflitam
+            r = self.client.post('/api/usuarios/', {'nome': 'C', 'email': email, 'id_cliente': ''}, format='json')
+            self.assertEqual(r.status_code, 201)
+        self.assertEqual(Usuario.objects.filter(id_cliente__isnull=True, email__in=['c1@x.com', 'c2@x.com']).count(), 2)
+
+    def test_busca_pelo_id(self):
+        self.cliente.id_cliente = '9876'
+        self.cliente.save()
+        self.entrar(self.admin)
+        r = self.client.get('/api/usuarios/?perfil=cliente&busca=9876')
+        self.assertEqual([u['email'] for u in r.data['results']], ['cli@x.com'])
+
+    def test_cliente_ve_o_proprio_id_mas_nao_altera(self):
+        self.cliente.id_cliente = '1234'
+        self.cliente.save()
+        self.entrar(self.cliente)
+        self.assertEqual(self.client.get('/api/auth/eu/').data['id_cliente'], '1234')
+        self.client.patch('/api/auth/eu/', {'id_cliente': '9999'}, format='json')
+        self.cliente.refresh_from_db()
+        self.assertEqual(self.cliente.id_cliente, '1234')

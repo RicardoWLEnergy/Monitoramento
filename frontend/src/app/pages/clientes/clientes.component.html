@@ -24,7 +24,11 @@
       <div>
         <h3>{{ modo() === 'novo' ? 'Novo cliente' : 'Vincular inversor a ' + alvo()?.nome }}</h3>
         <span class="sub">
-          Informe a SN de um inversor: o sistema busca a usina na plataforma e vincula ao cliente.
+          @if (modo() === 'novo') {
+            A SN do inversor é opcional: sem ela, o cliente acompanha a instalação em "Meu projeto" e a usina é vinculada depois.
+          } @else {
+            Informe a SN de um inversor: o sistema busca a usina na plataforma e vincula ao cliente.
+          }
         </span>
       </div>
       <button class="btn sm" type="button" (click)="fechar()" aria-label="Fechar">
@@ -42,6 +46,8 @@
             <input class="input" name="nome" [(ngModel)]="form.nome" required></label>
           <label class="campo"><span class="label">E-mail *</span>
             <input class="input" type="email" name="email" [(ngModel)]="form.email" required></label>
+          <label class="campo"><span class="label">ID do cliente</span>
+            <input class="input num" name="id_cliente" [(ngModel)]="form.id_cliente" placeholder="Nº da obra"></label>
           <label class="campo"><span class="label">CPF</span>
             <input class="input num" name="cpf" [(ngModel)]="form.cpf" placeholder="000.000.000-00"></label>
           <label class="campo"><span class="label">WhatsApp</span>
@@ -60,12 +66,13 @@
     <fieldset>
       <legend class="label">Usina</legend>
       <div class="campos">
-        <label class="campo"><span class="label">Plataforma *</span>
-          <select class="input" name="plataforma" [(ngModel)]="form.plataforma" required>
+        <label class="campo"><span class="label">Plataforma{{ modo() === 'novo' ? '' : ' *' }}</span>
+          <select class="input" name="plataforma" [(ngModel)]="form.plataforma">
             @for (p of plataformas; track p.valor) { <option [value]="p.valor">{{ p.rotulo }}</option> }
           </select></label>
-        <label class="campo"><span class="label">SN do inversor *</span>
-          <input class="input num" name="sn" [(ngModel)]="form.sn" required placeholder="Número de série do inversor"></label>
+        <label class="campo"><span class="label">SN do inversor{{ modo() === 'novo' ? ' (opcional)' : ' *' }}</span>
+          <input class="input num" name="sn" [(ngModel)]="form.sn" [required]="modo() !== 'novo'"
+                 [placeholder]="modo() === 'novo' ? 'Em branco se a usina ainda não foi instalada' : 'Número de série do inversor'"></label>
       </div>
     </fieldset>
 
@@ -73,7 +80,7 @@
       <button class="btn" type="button" (click)="fechar()">Cancelar</button>
       <button class="btn primary" type="submit" [disabled]="enviando()">
         @if (enviando()) { <span class="spinner"></span> Consultando a plataforma... }
-        @else { {{ modo() === 'novo' ? 'Cadastrar e vincular' : 'Vincular usina' }} }
+        @else { {{ modo() !== 'novo' ? 'Vincular usina' : form.sn.trim() ? 'Cadastrar e vincular' : 'Cadastrar cliente' }} }
       </button>
     </footer>
   </form>
@@ -85,7 +92,7 @@
     <h3>{{ (resultado()?.count ?? 0) | i18nPlural: {'=1': '# cliente', 'other': '# clientes'} }}</h3>
     <span class="com-icone busca">
       <lucide-icon [img]="icones.Search" [size]="16" [strokeWidth]="1.7" />
-      <input class="input" type="search" placeholder="Buscar nome, e-mail ou CPF"
+      <input class="input" type="search" placeholder="Buscar nome, e-mail, CPF ou ID"
              [value]="busca()" (input)="definirBusca($any($event.target).value)">
     </span>
   </div>
@@ -93,7 +100,7 @@
   <div class="tabela-wrap">
     <table class="tabela">
       <thead>
-        <tr><th>Cliente</th><th>CPF</th><th>WhatsApp</th><th>Usinas</th><th>Acesso</th><th class="dir">Ações</th></tr>
+        <tr><th>Cliente</th><th>ID</th><th>CPF</th><th>WhatsApp</th><th>Usinas</th><th>Acesso</th><th class="dir">Ações</th></tr>
       </thead>
       <tbody>
         @for (c of resultado()?.results ?? []; track c.id) {
@@ -107,6 +114,7 @@
                 </a>
               }
             </td>
+            <td class="num">{{ c.id_cliente || '—' }}</td>
             <td class="num">{{ c.cpf_formatado || '—' }}</td>
             <td class="num">{{ c.whatsapp ? whatsappFormatado(c.whatsapp) : '—' }}</td>
             <td>
@@ -127,7 +135,7 @@
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="6">
+          <tr><td colspan="7">
             @if (carregando()) {
               <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
             } @else if (busca()) {

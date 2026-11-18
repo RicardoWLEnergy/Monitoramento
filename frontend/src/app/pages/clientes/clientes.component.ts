@@ -22,13 +22,14 @@ interface Formulario extends Required<Omit<NovoUsuario, 'perfil'>> {
 }
 
 const formularioVazio = (): Formulario => ({
-  nome: '', email: '', cpf: '', whatsapp: '', endereco: '', senha: '', plataforma: 'foxess', sn: '',
+  nome: '', email: '', id_cliente: '', cpf: '', whatsapp: '', endereco: '', senha: '', plataforma: 'foxess', sn: '',
 });
 
 /**
  * Clientes (Admin e Colaborador).
- * Cadastro = dados do cliente + SN do inversor: o sistema busca a usina na plataforma,
- * grava a usina inteira e vincula ao cliente.
+ * Cadastro = dados do cliente (com o ID = nº da obra) + SN do inversor, que é opcional:
+ * - com SN: o sistema busca a usina na plataforma, grava a usina inteira e vincula ao cliente;
+ * - sem SN: cliente ainda em instalação (acompanha em "Meu projeto"); a usina é vinculada depois.
  */
 @Component({
   selector: 'app-clientes',
@@ -115,6 +116,13 @@ export class ClientesComponent {
         const novo = { ...limparVazios(dados), perfil: 'cliente' } as NovoUsuario;
         cliente = await firstValueFrom(this.api.criar(novo));
         this.alvo.set(cliente);
+        if (!sn.trim()) {            // sem SN: cliente em instalação, a usina é vinculada depois
+          this.sucesso.set({ texto: `${cliente.nome}: cliente cadastrado. Quando a usina estiver pronta, use "Vincular".` });
+          this.modo.set(null);
+          this.enviando.set(false);
+          this.recarregar.update(n => n + 1);
+          return;
+        }
         this.modo.set('vincular');   // se a SN falhar, dá para tentar de novo sem recriar o cliente
       } catch (e) {
         this.erro.set(mensagemDeErro(e, 'Não foi possível cadastrar o cliente.'));

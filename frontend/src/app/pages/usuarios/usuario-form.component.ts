@@ -6,7 +6,7 @@ import { AuthService, Perfil, ROTULO_PERFIL, mensagemDeErro } from '../../servic
 import { NovoUsuario, UsuarioCadastro, UsuariosService } from '../../services/usuarios.service';
 
 interface Formulario {
-  nome: string; email: string; cpf: string; whatsapp: string; endereco: string;
+  nome: string; email: string; id_cliente: string; cpf: string; whatsapp: string; endereco: string;
   perfil: Perfil; senha: string; ativo: boolean;
 }
 
@@ -40,13 +40,15 @@ export class UsuarioFormComponent implements OnChanges {
   readonly erro = signal<string | null>(null);
 
   get editando(): boolean { return this.usuario() !== null; }
+  /** O ID do cliente (nº da obra) só existe para clientes. */
+  get eCliente(): boolean { return (this.usuario()?.perfil ?? this.form?.perfil) === 'cliente'; }
   /** Não deixa o próprio usuário se desativar ou mudar o próprio perfil (a API também bloqueia). */
   get eVoceMesmo(): boolean { return this.usuario()?.id === this.auth.usuario()?.id; }
 
   ngOnChanges(): void {
     const u = this.usuario();
     this.form = {
-      nome: u?.nome ?? '', email: u?.email ?? '', cpf: u?.cpf_formatado ?? '',
+      nome: u?.nome ?? '', email: u?.email ?? '', id_cliente: u?.id_cliente ?? '', cpf: u?.cpf_formatado ?? '',
       whatsapp: u?.whatsapp ?? '', endereco: u?.endereco ?? '',
       perfil: u?.perfil ?? this.perfis()[0], senha: '', ativo: u?.ativo ?? true,
     };
@@ -61,6 +63,7 @@ export class UsuarioFormComponent implements OnChanges {
       nome: f.nome.trim(), email: f.email.trim(), cpf: f.cpf.trim(), whatsapp: f.whatsapp.trim(),
       endereco: f.endereco.trim(),
     };
+    if (this.eCliente) dados.id_cliente = f.id_cliente.trim();
     if (this.perfis().length > 1 && !this.eVoceMesmo) dados.perfil = f.perfil;
     if (!this.editando) dados.perfil = f.perfil;
     if (f.senha) dados.senha = f.senha;

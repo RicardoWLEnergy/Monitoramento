@@ -205,7 +205,7 @@ class UsuarioViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.Retr
     serializer_class = UsuarioSerializer
     permission_classes = [EhEquipe]
     http_method_names = ['get', 'post', 'patch', 'options']
-    search_fields = ['nome', 'email', 'cpf', 'whatsapp']
+    search_fields = ['nome', 'email', 'cpf', 'whatsapp', 'id_cliente']
     ordering_fields = ['nome', 'email', 'perfil', 'criado_em', 'last_login']
     ordering = ['nome']
 

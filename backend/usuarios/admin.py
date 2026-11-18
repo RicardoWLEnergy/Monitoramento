@@ -41,14 +41,14 @@ class UsuarioAdmin(UserAdmin):
     add_form = UsuarioCriacaoForm
     form = UsuarioAlteracaoForm
 
-    list_display = ('nome', 'email', 'perfil', 'whatsapp', 'cpf_formatado', 'is_active', 'last_login')
+    list_display = ('nome', 'id_cliente', 'email', 'perfil', 'whatsapp', 'cpf_formatado', 'is_active', 'last_login')
     list_filter = ('perfil', 'is_active')
-    search_fields = ('nome', 'email', 'whatsapp', 'cpf')
+    search_fields = ('nome', 'email', 'whatsapp', 'cpf', 'id_cliente')
     ordering = ('nome',)
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Dados pessoais', {'fields': ('nome', 'whatsapp', 'cpf')}),
+        ('Dados pessoais', {'fields': ('nome', 'id_cliente', 'whatsapp', 'cpf')}),
         ('Endereço', {'fields': ('endereco', 'latitude', 'longitude', 'mapa')}),
         ('Acesso', {'fields': ('perfil', 'is_active', 'is_superuser')}),
         ('Datas', {'fields': ('last_login', 'criado_em')}),

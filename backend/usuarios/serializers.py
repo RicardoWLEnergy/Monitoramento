@@ -43,6 +43,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
     email = serializers.EmailField()
     cpf = serializers.CharField(max_length=14, required=False, allow_blank=True, allow_null=True)
     whatsapp = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    id_cliente = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
 
     senha = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
     ativo = serializers.BooleanField(source='is_active', required=False)
@@ -53,7 +54,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = [
-            'id', 'email', 'nome', 'whatsapp', 'cpf', 'cpf_formatado',
+            'id', 'id_cliente', 'email', 'nome', 'whatsapp', 'cpf', 'cpf_formatado',
             'endereco', 'latitude', 'longitude', 'link_maps',
             'perfil', 'ativo', 'criado_em', 'last_login', 'senha', 'usinas',
         ]
@@ -79,6 +80,13 @@ class UsuarioSerializer(serializers.ModelSerializer):
         if cpf and self._ja_existe(cpf=cpf):
             raise serializers.ValidationError('Já existe um usuário com este CPF.')
         return cpf
+
+    def validate_id_cliente(self, valor):
+        """Nº da obra (chave da planilha OBRAS). Vazio = sem ID."""
+        valor = (valor or '').strip() or None
+        if valor and self._ja_existe(id_cliente=valor):
+            raise serializers.ValidationError('Já existe um cliente com este ID.')
+        return valor
 
     def validate_whatsapp(self, valor):
         numero = _validar_com(normalizar_whatsapp, valor)
@@ -116,10 +124,11 @@ class EuSerializer(UsuarioSerializer):
     - Trocar o WhatsApp exige a senha atual (o WhatsApp também serve para entrar com código).
     """
     email = serializers.EmailField(read_only=True)
+    id_cliente = serializers.CharField(read_only=True)     # quem define é a equipe
     senha_atual = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
 
     class Meta(UsuarioSerializer.Meta):
-        fields = ['id', 'email', 'nome', 'whatsapp', 'cpf_formatado', 'endereco', 'link_maps', 'perfil',
+        fields = ['id', 'id_cliente', 'email', 'nome', 'whatsapp', 'cpf_formatado', 'endereco', 'link_maps', 'perfil',
                   'last_login', 'senha_atual']
         read_only_fields = ['endereco', 'perfil', 'last_login']
 

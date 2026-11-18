@@ -1,0 +1,62 @@
+@let e = etapa();
+@if (!compacto()) {
+  <div class="topo">
+    <div class="nome">
+      <span class="marcador-etapa" [class]="e.status">
+        @if (e.status === 'concluida') { <lucide-icon [img]="icones.Check" [size]="18" [strokeWidth]="2.6" /> }
+        @else { {{ indice() + 1 }} }
+      </span>
+      <div>
+        <span class="label">Etapa {{ indice() + 1 }} de {{ total() }}</span>
+        <h2>{{ e.nome }}</h2>
+      </div>
+      <span class="tag" [class]="classe()">{{ rotulo() }}</span>
+    </div>
+    <div class="navegar">
+      <button class="btn sm" type="button" (click)="ir.emit(-1)" [disabled]="indice() === 0">Etapa anterior</button>
+      <button class="btn sm" type="button" (click)="ir.emit(1)" [disabled]="indice() === total() - 1">Próxima etapa</button>
+    </div>
+  </div>
+}
+
+<div class="corpo" [class]="e.status">
+  <div class="col">
+    <span class="label titulo">{{ titulo() }}</span>
+    <ul class="itens">
+      @for (t of itens(); track t) {
+        <li><lucide-icon [img]="iconeItem()" [size]="17" [strokeWidth]="2" /><span>{{ t }}</span></li>
+      }
+    </ul>
+    @if (vistoria(); as prazo) {
+      <div class="vistoria"><span>Prazo da concessionária para a vistoria</span><strong class="num">até {{ prazo }}</strong></div>
+    }
+    <dl class="datas">
+      @for (d of datas(); track d[0]) {
+        <div><dt class="label">{{ d[0] }}</dt><dd class="num">{{ d[1] }}</dd></div>
+      }
+    </dl>
+  </div>
+
+  <div class="col">
+    <span class="label">Documentos</span>
+    @if (e.documentos.length) {
+      <ul class="docs">
+        @for (d of e.documentos; track d.nome) {
+          <li class="doc" [class.pendente]="!d.disponivel">
+            <lucide-icon class="doc-icone" [img]="icones.FileText" [size]="18" [strokeWidth]="1.7" />
+            <span class="doc-txt"><strong>{{ d.nome }}</strong><small>{{ d.disponivel ? 'PDF' : d.aviso }}</small></span>
+            @if (d.disponivel) {
+              <button class="btn sm" type="button" (click)="baixar(d)" [disabled]="baixando() === d.tipo">
+                @if (baixando() === d.tipo) { <span class="spinner"></span> Baixando... }
+                @else { <lucide-icon [img]="icones.Download" [size]="14" [strokeWidth]="1.8" /> Baixar }
+              </button>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="sem-docs">Esta etapa não tem documentos.</p>
+    }
+    @if (erroDownload()) { <span class="erro-msg">{{ erroDownload() }}</span> }
+  </div>
+</div>

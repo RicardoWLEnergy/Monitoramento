@@ -172,6 +172,33 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 - A curva de 5 min do **histórico** (`getDevHistoryKpi`) ainda não está liberada na conta atual (erro 401):
   a energia diária funciona, e a curva de 5 min se forma pela coleta de tempo real daqui para frente.
 
+### Google (planilha OBRAS e documentos da tela "Meu projeto")
+O cliente vê o andamento da obra pela linha da aba **OBRAS** cujo **Nº OBRA** = ID do cliente (campo do
+cadastro). O servidor lê a planilha (no máximo a cada 5 min) e entrega os documentos do Drive; o cliente nunca
+vê valor, vendedor, nota fiscal etc., nem os links do Drive.
+
+Configuração (uma vez), com uma **conta de serviço** (usuário robô só de leitura):
+0. Se o Google recusar criar a chave ("A criação de chaves de conta de serviço está desativada"), o TI
+   precisa liberar a política **iam.disableServiceAccountKeyCreation** SÓ no projeto do sistema
+   (Políticas da organização → Gerenciar política → Substituir a do pai → Desativada; exige o papel
+   "Administrador de políticas da organização"). Depois de criar a chave, pode reativar: a chave continua valendo.
+1. **Google Cloud** (console.cloud.google.com) → criar um projeto → *APIs e serviços* → ativar
+   **Google Sheets API** e **Google Drive API**.
+2. *IAM e administrador → Contas de serviço* → **Criar conta de serviço** (sem papéis) → abrir a conta →
+   *Chaves* → **Adicionar chave → JSON** (baixa um arquivo `.json`; guarde em local seguro, nunca no git).
+3. **Compartilhar** a planilha e a pasta dos documentos no Drive com o e-mail da conta de serviço
+   (`...@...iam.gserviceaccount.com`) como **Leitor**.
+4. No `.env`: `GOOGLE_CREDENCIAIS` = conteúdo do `.json` em base64 (PowerShell:
+   `[Convert]::ToBase64String([IO.File]::ReadAllBytes("chave.json"))`; Linux: `base64 -w0 chave.json`)
+   e `PLANILHA_OBRAS_ID` = o código no endereço da planilha (`/spreadsheets/d/<CÓDIGO>/edit`).
+5. Na aba OBRAS, colunas com o **ID do arquivo no Drive** de cada documento (o código no link
+   `/file/d/<ID>/view`): `ID ART`, `ID PARECER DE ACESSO`, `ID PRANCHA`, `ID COMISSIONAMENTO N1`,
+   `ID COMISSIONAMENTO N2`. Vazia = "disponível em breve" na tela.
+
+Regras: etapa atual = coluna **ETAPA ENGENHARIA**; as datas dizem quando cada etapa terminou; prazo da
+vistoria = **VISTORIA TÉCNICA** + 7 dias úteis (Neoenergia) ou 5 (Equatorial), sem fins de semana e feriados
+nacionais. A equipe vê o projeto de qualquer cliente em **Meu projeto** (campo "ID do cliente").
+
 ### uazapi (WhatsApp, código de acesso no login)
 - Variáveis no `.env`: `UAZAPI_URL` (endereço do servidor, no painel da uazapi) e `UAZAPI_TOKEN`
   (token da **instância**, não o admintoken). Vazias = a opção de código responde "indisponível".

@@ -1,9 +1,14 @@
+import logging
+from urllib.parse import quote
+
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from usuarios.permissoes import EhEquipe, usinas_visiveis
+from integracoes import google, obras
+from usuarios.permissoes import EhEquipe, perfil_de, usinas_visiveis
 
 from .consultas import curva_da_carteira, dashboard, geracao_por_dia, ler_data, ler_periodo
 from .models import Alerta
@@ -63,3 +68,56 @@ class AlertaViewSet(viewsets.ReadOnlyModelViewSet):
         if params.get('tipo'):
             qs = qs.filter(tipo=params['tipo'])
         return qs
+
+
+# ----------------------------------------------------------------------------
+# Meu projeto (planilha OBRAS + documentos do Drive)
+# ----------------------------------------------------------------------------
+log = logging.getLogger(__name__)
+PLANILHA_INDISPONIVEL = 'Não foi possível carregar o seu projeto agora. Tente de novo em alguns minutos.'
+
+
+def _id_cliente_da_requisicao(request) -> str | None:
+    """O cliente vê SÓ o próprio projeto (pelo ID do cadastro). A equipe pode ver o de um cliente: ?id_cliente=."""
+    if perfil_de(request.user) == 'cliente':
+        return request.user.id_cliente
+    return (request.query_params.get('id_cliente') or '').strip() or None
+
+
+class ProjetoView(APIView):
+    """GET o projeto de instalação do cliente logado (ou {"projeto": null} se não houver)."""
+
+    def get(self, request):
+        id_cliente = _id_cliente_da_requisicao(request)
+        try:
+            linha = obras.linha_do_cliente(id_cliente)
+        except obras.PlanilhaIndisponivel as erro:
+            log.warning('Meu projeto: planilha indisponível: %s', erro)
+            return Response({'detail': PLANILHA_INDISPONIVEL}, status=503)
+        return Response({'projeto': obras.montar_projeto(linha, id_cliente) if linha else None})
+
+
+class DocumentoProjetoView(APIView):
+    """GET o arquivo (PDF) de um documento do projeto. Só da linha do próprio cliente."""
+
+    def get(self, request, tipo):
+        if tipo not in obras.DOCUMENTOS:
+            return Response({'detail': 'Documento inexistente.'}, status=404)
+        id_cliente = _id_cliente_da_requisicao(request)
+        try:
+            linha = obras.linha_do_cliente(id_cliente)
+        except obras.PlanilhaIndisponivel as erro:
+            log.warning('Documento do projeto: planilha indisponível: %s', erro)
+            return Response({'detail': PLANILHA_INDISPONIVEL}, status=503)
+        arquivo_id = obras.id_do_arquivo(linha, tipo) if linha else None
+        if not arquivo_id:
+            return Response({'detail': 'Este documento ainda não está disponível.'}, status=404)
+        try:
+            arquivo = google.baixar_arquivo(arquivo_id)
+        except google.GoogleErro as erro:
+            log.warning('Documento do projeto %s (%s): %s', tipo, id_cliente, erro)
+            return Response({'detail': 'Não foi possível baixar o documento agora. Tente de novo em alguns minutos.'},
+                            status=502)
+        resposta = HttpResponse(arquivo.conteudo, content_type=arquivo.tipo)
+        resposta['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(arquivo.nome)}"
+        return resposta

@@ -89,6 +89,10 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     perfil = models.CharField('perfil', max_length=20, choices=Perfil.choices, default=Perfil.CLIENTE)
 
     # --- Dados do cliente ---
+    id_cliente = models.CharField(
+        'ID do cliente', max_length=20, unique=True, null=True, blank=True,
+        help_text='Nº da obra: o mesmo número da planilha OBRAS, do CRM e do servidor da empresa.',
+    )
     cpf = models.CharField('CPF', max_length=11, unique=True, null=True, blank=True,
                            help_text='Só números; os dígitos verificadores são conferidos.')
     endereco = models.CharField('endereço', max_length=255, blank=True)
@@ -136,6 +140,7 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 
     def save(self, *args, **kwargs):
         self.email = self.email.strip().lower()  # "Ana@X.com" e "ana@x.com" são a mesma conta
+        self.id_cliente = (self.id_cliente or '').strip() or None   # vazio vira "sem ID" (o campo é único)
         self.whatsapp = normalizar_whatsapp(self.whatsapp)
         self.cpf = normalizar_cpf(self.cpf)
         super().save(*args, **kwargs)

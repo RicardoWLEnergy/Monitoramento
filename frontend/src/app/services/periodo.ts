@@ -6,6 +6,14 @@ export const hojeIso = () => isoLocal(new Date());
 export const diasAtras = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return isoLocal(d); };
 /** '2026-11-05' -> '05/11' */
 export const diaMesBR = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+/** '2026-11-05' -> '05/11/2026' */
+export const dataBR = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+/** Dias entre duas datas AAAA-MM-DD (no fuso local, sem o deslocamento de UTC). */
+export function diasEntre(de: string, ate: string): number {
+  const local = (iso: string) => { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d).getTime(); };
+  return Math.round((local(ate) - local(de)) / 86_400_000);
+}
 
 export interface AtalhoPeriodo { rotulo: string; inicio: string; fim: string; }
 

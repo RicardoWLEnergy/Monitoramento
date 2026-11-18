@@ -1,0 +1,52 @@
+:host { display: grid; gap: 22px; }
+
+.topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.nome { --m: 40px; display: flex; align-items: center; gap: 14px; }
+.nome h2 { margin: 2px 0 0; font: 700 24px var(--font-display); letter-spacing: var(--tracking-tight); }
+.navegar { display: flex; gap: 8px; }
+
+
+.corpo { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 36px; }
+.col { display: grid; gap: 14px; align-content: start; }
+.concluida .titulo { color: var(--ok); }
+.andamento .titulo { color: var(--warn-txt); }
+
+.itens { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; max-width: 60ch; }
+.itens li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; font-size: 14.5px; line-height: 1.45; }
+.itens lucide-icon { margin-top: 1px; }
+.concluida .itens lucide-icon { color: var(--ok); }
+.andamento .itens lucide-icon { color: var(--wl-orange); }
+.proxima .itens li { color: var(--muted); }
+.proxima .itens lucide-icon { color: var(--wl-gray-500); }
+
+.vistoria {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 10px 14px;
+  border-left: 3px solid var(--wl-orange); background: var(--warn-bg); font-size: 13px;
+}
+.vistoria strong { font: 700 15px var(--font-display); }
+
+.datas { display: flex; flex-wrap: wrap; gap: 6px 32px; margin: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.datas dd { margin: 2px 0 0; font-weight: 600; font-size: 15px; }
+
+.docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.doc {
+  display: flex; align-items: center; gap: 12px; padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card);
+}
+.doc-icone { flex: none; color: var(--wl-orange); }
+.doc-txt { flex: 1; min-width: 0; display: grid; }
+.doc-txt strong { font-size: 13.5px; font-weight: 600; }
+.doc-txt small { font-size: 12px; color: var(--muted); }
+.doc.pendente { border-style: dashed; background: transparent; }
+.doc.pendente .doc-icone { color: var(--wl-gray-500); }
+.sem-docs {
+  margin: 0; padding: 12px; border: 1px dashed var(--hairline); border-radius: var(--radius-sm);
+  color: var(--muted); font-size: 13px; text-align: center;
+}
+
+.erro-msg { color: var(--danger-txt); font-size: 13px; }
+.btn .spinner { width: 12px; height: 12px; }
+
+@media (max-width: 760px) {
+  .corpo { grid-template-columns: 1fr; gap: 20px; }
+}

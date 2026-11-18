@@ -33,6 +33,12 @@ export const routes: Routes = [
         title: 'Usina · W.L Energy',
       },
       {
+        // Acompanhamento da instalação (para o cliente; a equipe abre pelo endereço /projeto)
+        path: 'projeto',
+        loadComponent: () => import('./pages/projeto/projeto.component').then(m => m.ProjetoComponent),
+        title: 'Meu projeto · W.L Energy',
+      },
+      {
         path: 'clientes',
         canActivate: [equipeGuard],
         loadComponent: () => import('./pages/clientes/clientes.component').then(m => m.ClientesComponent),

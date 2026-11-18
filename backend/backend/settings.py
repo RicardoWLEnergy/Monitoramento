@@ -146,6 +146,11 @@ HUAWEI_SENHA = env('HUAWEI_SENHA', default='')
 # uazapi (WhatsApp): envio do código de acesso no login. URL = endereço do servidor no painel da uazapi
 UAZAPI_URL = env('UAZAPI_URL', default='')
 UAZAPI_TOKEN = env('UAZAPI_TOKEN', default='')   # token da INSTÂNCIA
+# Google (planilha OBRAS e documentos no Drive), com uma conta de serviço só de leitura.
+# GOOGLE_CREDENCIAIS = conteúdo do arquivo JSON da chave, em base64 (ou o próprio JSON)
+GOOGLE_CREDENCIAIS = env('GOOGLE_CREDENCIAIS', default='')
+PLANILHA_OBRAS_ID = env('PLANILHA_OBRAS_ID', default='')   # o código no endereço: docs.google.com/spreadsheets/d/<ID>/
+PLANILHA_OBRAS_ABA = env('PLANILHA_OBRAS_ABA', default='OBRAS')
 
 
 # ---------- API (Django REST Framework + login JWT) ----------
