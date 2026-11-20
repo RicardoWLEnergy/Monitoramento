@@ -209,12 +209,20 @@ def _meses_do_periodo(inicio: date, fim: date) -> list[tuple[int, int]]:
     return meses
 
 
+def desde_o_inicio(usina: Usina, inicio: date) -> date:
+    """A importação nunca vai antes do início da operação (antes dele tudo seria zero)."""
+    return max(inicio, usina.inicio_operacao) if usina.inicio_operacao else inicio
+
+
 def _desde_a_primeira_geracao(usina: Usina, por_dia: dict[date, float]) -> dict[date, float]:
     """
-    Descarta os zeros de ANTES da usina começar a gerar (antes de existir), mas mantém os zeros
-    depois disso (dias parados são informação). A 1ª geração considera o que já está no banco,
-    porque a importação vem em pedaços (1 mês por vez).
+    Descarta os dias de ANTES da usina operar e mantém os zeros depois (dias parados são informação).
+    - Com o início da operação cadastrado: corta nele.
+    - Sem ele: corta antes da 1ª geração (considerando o que já está no banco, porque a importação
+      vem em pedaços de 1 mês).
     """
+    if usina.inicio_operacao:
+        return {d: kwh for d, kwh in por_dia.items() if d >= usina.inicio_operacao}
     candidatos = [d for d, kwh in por_dia.items() if kwh > 0]
     primeira_no_banco = (GeracaoDiaria.objects.filter(usina=usina, energia_kwh__gt=0)
                          .aggregate(primeira=Min('data'))['primeira'])
@@ -237,7 +245,9 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: FoxESSCl
     """Energia de cada dia entre `inicio` e `fim` (1 chamada por inversor por mês), somando os inversores."""
     api = api or cliente_foxess()
     rel = Relatorio()
-    fim = min(fim, timezone.localdate())
+    inicio, fim = desde_o_inicio(usina, inicio), min(fim, timezone.localdate())
+    if inicio > fim:
+        return rel
     por_dia: dict[date, float] = defaultdict(float)
     meses_com_falha: set[tuple[int, int]] = set()
 
@@ -282,7 +292,7 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: FoxESSCliente | 
     api = api or cliente_foxess()
     rel = Relatorio()
     fuso = ZoneInfo(usina.fuso_horario)
-    inicio, fim = max(inicio, limite_curvas()), min(fim, timezone.localdate())
+    inicio, fim = max(desde_o_inicio(usina, inicio), limite_curvas()), min(fim, timezone.localdate())
     criar_particoes(meses_antes=settings.LEITURAS_RETENCAO_MESES - 1)
 
     dia = fim
@@ -308,7 +318,9 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: FoxESSCliente | 
             # Uma amostra real por bloco para ESTE inversor; depois soma os inversores da usina
             for bloco, valor in amostra_por_bloco(pontos).items():
                 soma[bloco] += valor
-        if soma and not falhou:          # dia com inversor faltando não substitui a curva já guardada
+        # Dia com inversor faltando não substitui a curva já guardada; dia todo zerado (a usina ainda não
+        # operava) não é gravado: seriam 288 leituras inúteis por dia
+        if soma and not falhou and max(soma.values()) > 0:
             Leitura.objects.bulk_create(
                 [Leitura(usina=usina, data_hora=m, potencia_kw=round(kw, 3)) for m, kw in soma.items()],
                 update_conflicts=True, unique_fields=['usina', 'data_hora'], update_fields=['potencia_kw'],

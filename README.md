@@ -149,6 +149,8 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 |---|---|
 | `coletar` | coleta automática: tempo real a cada 5 min + rotina diária (energia dos últimos dias, curva de ontem, partições) + importações de histórico pedidas na tela |
 | `coletar --uma-vez` | um ciclo completo e sai (bom para testar) |
+| `preencher_inicio_operacao [--aplicar]` | busca na plataforma a data de criação/conexão das usinas sem "início da operação" (sem `--aplicar`, só mostra; Huawei faz 1 login) |
+| `limpar_dias_sem_geracao [--aplicar]` | apaga energia/leituras zeradas de antes de cada usina começar a operar (sem `--aplicar`, só mostra) |
 | `particoes_leitura` | cria as partições dos próximos meses e remove as antigas (o coletor já faz isso todo dia) |
 | `test` | roda os testes automáticos (nenhum acessa as APIs reais) |
 

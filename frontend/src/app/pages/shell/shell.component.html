@@ -22,7 +22,7 @@
   <nav class="sb-nav">
     <div class="sb-label"><span class="txt">Monitoramento</span></div>
     @for (item of monitoramento; track item.rota) {
-      @if ((!item.soEquipe || auth.eEquipe()) && (!item.soCliente || !auth.eEquipe())) {
+      @if ((!item.soEquipe || auth.eEquipe()) && (!item.comUsinas || auth.temUsinas()) && (!item.comProjeto || auth.temProjeto())) {
         <a class="sb-item" [routerLink]="item.rota" routerLinkActive="ativo"
            [attr.title]="recolhida() ? item.rotulo : null">
           <lucide-icon [img]="item.icone" [size]="18" [strokeWidth]="1.7" />

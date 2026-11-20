@@ -32,7 +32,7 @@ const INTERVALO_PROGRESSO_MS = 5000;
  * - Histórico de geração: pede a importação de dias anteriores; o servidor importa em segundo plano
  *   (pode fechar a página) e a tela mostra o progresso enquanto estiver aberta (Admin e Colaborador)
  * - Clientes vinculados: Admin e Colaborador
- * - Geração esperada e alertas: só o Admin altera
+ * - Geração esperada (prognóstico): Admin e Colaborador; alertas: só o Admin altera
  * - Apagar usina: só o Admin (desativa; o histórico fica e volta se a SN for cadastrada de novo)
  */
 @Component({
@@ -90,8 +90,10 @@ export class UsinaConfigComponent implements OnChanges {
     this.dados = {
       nome: u.nome, endereco: u.endereco, cidade: u.cidade, uf: u.uf,
       latitude: u.latitude, longitude: u.longitude, potencia_kwp: u.potencia_kwp, fuso_horario: u.fuso_horario,
+      inicio_operacao: u.inicio_operacao,
     };
     if (!this.fusos.includes(u.fuso_horario)) this.fusos = [u.fuso_horario, ...FUSOS];
+    this.periodo = { ...this.periodo, inicio: this.desdeOInicio(this.periodo.inicio) };
     this.alertas = {
       alertas_ativos: u.alertas_ativos,
       limite_desempenho_pct: u.limite_desempenho_pct,
@@ -115,7 +117,13 @@ export class UsinaConfigComponent implements OnChanges {
 
   // ---------- Histórico ----------
   usarAtalho(dias: number): void {
-    this.periodo = { ...this.periodo, inicio: diasAtras(dias - 1), fim: this.hoje };
+    this.periodo = { ...this.periodo, inicio: this.desdeOInicio(diasAtras(dias - 1)), fim: this.hoje };
+  }
+
+  /** A importação começa no início da operação (antes dele tudo seria zero). */
+  desdeOInicio(data: string): string {
+    const inicio = this.usina().inicio_operacao;
+    return inicio && inicio > data ? inicio : data;
   }
 
   /** Estimativa: ~1 s por inversor por dia de curva + 1 s por inversor por mês de energia. */
@@ -175,7 +183,10 @@ export class UsinaConfigComponent implements OnChanges {
   // ---------- Demais seções ----------
   salvarDados(): void {
     const vazioViraNull = (v: number | null | string) => (v === '' || v === undefined ? null : v) as number | null;
-    const dados = { ...this.dados, latitude: vazioViraNull(this.dados.latitude), longitude: vazioViraNull(this.dados.longitude) };
+    const dados = {
+      ...this.dados, latitude: vazioViraNull(this.dados.latitude), longitude: vazioViraNull(this.dados.longitude),
+      inicio_operacao: this.dados.inicio_operacao || null,
+    };
     this.executar('dados', this.api.salvarDados(this.usina().id, dados), 'Dados salvos.');
   }
 

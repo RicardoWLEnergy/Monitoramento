@@ -51,7 +51,7 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         if self.action in ('partial_update', 'clientes', 'historico'):
             return [EhEquipe()]                      # editar, vincular clientes, importar histórico: Admin e Colaborador
         if self.action == 'geracao_esperada' and self.request.method == 'PUT':
-            return [EhAdmin()]
+            return [EhEquipe()]                      # prognóstico: Admin e Colaborador (alertas continuam só Admin)
         return super().get_permissions()
 
     def update(self, request, *args, **kwargs):
@@ -154,10 +154,15 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
                 return Response({'detail': 'Esta plataforma não tem importação de histórico.'}, status=400)
             if usina.importacoes.filter(status__in=ImportacaoHistorico.ATIVOS).exists():
                 return Response({'detail': 'Já existe uma importação em andamento para esta usina.'}, status=409)
+            periodo = dict(dados.validated_data)
+            if usina.inicio_operacao:   # antes do início da operação tudo seria zero: nem pede à plataforma
+                if periodo['fim'] < usina.inicio_operacao:
+                    return Response({'detail': f'A usina começou a operar em {usina.inicio_operacao:%d/%m/%Y}: '
+                                               'escolha um período a partir dessa data.'}, status=400)
+                periodo['inicio'] = max(periodo['inicio'], usina.inicio_operacao)
             try:
                 with transaction.atomic():
-                    ImportacaoHistorico.objects.create(usina=usina, solicitado_por=request.user,
-                                                       **dados.validated_data)
+                    ImportacaoHistorico.objects.create(usina=usina, solicitado_por=request.user, **periodo)
             except IntegrityError:   # dois cliques ao mesmo tempo
                 return Response({'detail': 'Já existe uma importação em andamento para esta usina.'}, status=409)
             return Response(self._situacao_historico(usina), status=202)

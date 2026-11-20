@@ -2,8 +2,9 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { Check, CircleDashed, Clock, Download, FileText, LucideAngularModule, SquareCheck } from 'lucide-angular';
 
 import { dataBR, diasEntre, hojeIso } from '../../services/periodo';
-import { mensagemDeErro } from '../../services/auth.service';
-import { DocumentoProjeto, EtapaProjeto, ProjetoService, StatusEtapa, TEXTOS_ETAPA } from '../../services/projeto.service';
+import {
+  DocumentoProjeto, EtapaProjeto, ProjetoService, StatusEtapa, TEXTOS_ETAPA, mensagemDoDownload,
+} from '../../services/projeto.service';
 
 const TITULO: Record<StatusEtapa, string> = {
   concluida: 'O que foi feito', andamento: 'O que está acontecendo agora', proxima: 'O que vai acontecer',
@@ -76,7 +77,7 @@ export class EtapaDetalheComponent {
     this.erroDownload.set(null);
     this.api.baixar(d.tipo, this.idCliente()).subscribe({
       next: () => this.baixando.set(null),
-      error: e => { this.baixando.set(null); this.erroDownload.set(mensagemDeErro(e, 'Não foi possível baixar o documento.')); },
+      error: async e => { this.baixando.set(null); this.erroDownload.set(await mensagemDoDownload(e)); },
     });
   }
 }

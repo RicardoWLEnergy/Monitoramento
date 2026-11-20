@@ -14,7 +14,8 @@ class UsinaListaSerializer(serializers.ModelSerializer):
     geracao_hoje_kwh = serializers.FloatField(read_only=True)
     geracao_mes_kwh = serializers.FloatField(read_only=True)
     esperado_mes_kwh = serializers.FloatField(read_only=True)
-    esperado_ate_hoje_kwh = serializers.FloatField(read_only=True)   # proporcional aos dias já passados no mês
+    # Esperado do mês até hoje, contando só os dias em que a usina já operava
+    esperado_ate_hoje_kwh = serializers.SerializerMethodField()
 
     class Meta:
         model = Usina
@@ -24,6 +25,10 @@ class UsinaListaSerializer(serializers.ModelSerializer):
             'potencia_atual_kw', 'geracao_hoje_kwh', 'geracao_mes_kwh', 'esperado_mes_kwh', 'esperado_ate_hoje_kwh',
         ]
 
+    def get_esperado_ate_hoje_kwh(self, obj) -> float:
+        from monitoramento.consultas import esperado_ate_hoje
+        return round(esperado_ate_hoje(obj), 3)
+
 
 class UsinaDetalheSerializer(UsinaListaSerializer):
     link_maps = serializers.CharField(read_only=True)
@@ -31,7 +36,7 @@ class UsinaDetalheSerializer(UsinaListaSerializer):
 
     class Meta(UsinaListaSerializer.Meta):
         fields = UsinaListaSerializer.Meta.fields + [
-            'id_externo', 'endereco', 'latitude', 'longitude', 'link_maps', 'fuso_horario',
+            'id_externo', 'endereco', 'latitude', 'longitude', 'link_maps', 'fuso_horario', 'inicio_operacao',
             'alertas_ativos', 'limite_desempenho_pct', 'minutos_sem_comunicacao', 'clientes',
         ]
 
@@ -45,7 +50,8 @@ class UsinaDetalheSerializer(UsinaListaSerializer):
         return dados
 
 
-CAMPOS_CADASTRAIS = ['nome', 'endereco', 'cidade', 'uf', 'latitude', 'longitude', 'potencia_kwp', 'fuso_horario']
+CAMPOS_CADASTRAIS = ['nome', 'endereco', 'cidade', 'uf', 'latitude', 'longitude', 'potencia_kwp', 'fuso_horario',
+                     'inicio_operacao']
 CAMPOS_ALERTAS = ['alertas_ativos', 'limite_desempenho_pct', 'minutos_sem_comunicacao']
 
 

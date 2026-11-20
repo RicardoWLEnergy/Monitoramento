@@ -21,7 +21,7 @@ from usinas.models import Plataforma, Status, Usina
 
 from .cadastro import status_da_usina
 from .coleta import (
-    Relatorio, _desde_a_primeira_geracao, _gravar_dias, _meses_do_periodo, _numero, amostra_por_bloco,
+    Relatorio, _desde_a_primeira_geracao, _gravar_dias, desde_o_inicio, _meses_do_periodo, _numero, amostra_por_bloco,
     arredondar_5min, e_noite, leitura_recente, limite_curvas, sem_comunicacao,
 )
 from .huawei import HuaweiCliente, HuaweiErro, HuaweiLoginErro
@@ -126,7 +126,7 @@ def importar_geracao_diaria(usina: Usina, inicio: date, fim: date, api: HuaweiCl
     api = api or cliente_huawei()
     rel = Relatorio()
     fuso = ZoneInfo(usina.fuso_horario)
-    fim = min(fim, timezone.localdate())
+    inicio, fim = desde_o_inicio(usina, inicio), min(fim, timezone.localdate())
     por_dia: dict[date, float] = {}
 
     for ano, mes in _meses_do_periodo(inicio, fim):
@@ -159,7 +159,7 @@ def importar_curvas(usina: Usina, inicio: date, fim: date, api: HuaweiCliente | 
     api = api or cliente_huawei()
     rel = Relatorio()
     fuso = ZoneInfo(usina.fuso_horario)
-    inicio, fim = max(inicio, limite_curvas()), min(fim, timezone.localdate())
+    inicio, fim = max(desde_o_inicio(usina, inicio), limite_curvas()), min(fim, timezone.localdate())
     criar_particoes(meses_antes=settings.LEITURAS_RETENCAO_MESES - 1)
     grupos = _por_tipo(usina.inversores.all())
 
@@ -207,6 +207,12 @@ def _gravar_curva(usina: Usina, por_inversor: dict[str, list], rel: Relatorio,
         for bloco, valor in amostra_por_bloco(pontos).items():
             if bloco.astimezone(fuso).date() not in dias_com_falha:
                 soma[bloco] += valor
+    # Dia todo zerado (a usina ainda não operava) não é gravado
+    maximo_do_dia: dict[date, float] = defaultdict(float)
+    for m, kw in soma.items():
+        dia = m.astimezone(fuso).date()
+        maximo_do_dia[dia] = max(maximo_do_dia[dia], kw)
+    soma = {m: kw for m, kw in soma.items() if maximo_do_dia[m.astimezone(fuso).date()] > 0}
     if soma:
         Leitura.objects.bulk_create(
             [Leitura(usina=usina, data_hora=m, potencia_kw=round(kw, 3)) for m, kw in soma.items()],

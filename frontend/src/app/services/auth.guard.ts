@@ -13,6 +13,7 @@ export const inicioGuard: CanActivateFn = (): UrlTree | Observable<UrlTree> => {
   const auth = inject(AuthService);
   const router = inject(Router);
   if (auth.eEquipe()) return router.createUrlTree(['/visao-geral']);
+  if (!auth.temUsinas()) return router.createUrlTree(['/projeto']);   // ainda em instalação
   return inject(UsinasService).listar({ page: 1 }).pipe(
     map(r => r.count === 1 ? router.createUrlTree(['/usinas', r.results[0].id]) : router.createUrlTree(['/usinas'])),
     catchError(() => of(router.createUrlTree(['/usinas']))),
@@ -41,4 +42,10 @@ export const equipeGuard: CanActivateFn = () => {
 export const adminGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   return auth.eAdmin() ? true : inject(Router).createUrlTree(['/']);
+};
+
+/** "Usinas": a equipe e o cliente que já tem usina; quem ainda está em instalação vai para "Meu projeto". */
+export const usinasGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  return auth.temUsinas() ? true : inject(Router).createUrlTree(['/projeto']);
 };

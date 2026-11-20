@@ -250,3 +250,17 @@ class IdClienteApiTests(ApiBase):
         self.client.patch('/api/auth/eu/', {'id_cliente': '9999'}, format='json')
         self.cliente.refresh_from_db()
         self.assertEqual(self.cliente.id_cliente, '1234')
+
+    def test_id_so_numeros_e_zeros_a_esquerda_nao_contam(self):
+        self.entrar(self.admin)
+        r = self.client.post('/api/usuarios/', {'nome': 'D', 'email': 'd@x.com', 'id_cliente': 'A-12'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('só números', str(r.data['id_cliente']))
+        r = self.client.post('/api/usuarios/', {'nome': 'E', 'email': 'e@x.com', 'id_cliente': '0123'}, format='json')
+        self.assertEqual(Usuario.objects.get(email='e@x.com').id_cliente, '123')
+        r = self.client.post('/api/usuarios/', {'nome': 'F', 'email': 'f@x.com', 'id_cliente': '123'}, format='json')
+        self.assertEqual(r.status_code, 400)                      # "0123" e "123" são o mesmo cliente
+
+    def test_eu_informa_quantas_usinas_o_cliente_tem(self):
+        self.entrar(self.cliente)
+        self.assertEqual(self.client.get('/api/auth/eu/').data['qtd_usinas'], 0)

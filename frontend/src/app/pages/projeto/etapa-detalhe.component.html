@@ -57,6 +57,6 @@
     } @else {
       <p class="sem-docs">Esta etapa não tem documentos.</p>
     }
-    @if (erroDownload()) { <span class="erro-msg">{{ erroDownload() }}</span> }
+    @if (erroDownload()) { <span class="erro-msg" role="alert">{{ erroDownload() }}</span> }
   </div>
 </div>

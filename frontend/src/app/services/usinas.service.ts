@@ -43,6 +43,8 @@ export interface UsinaDetalhe extends UsinaLista {
   longitude: number | null;
   link_maps: string | null;
   fuso_horario: string;
+  /** AAAA-MM-DD: criação da usina na plataforma; a importação e o esperado começam nela. */
+  inicio_operacao: string | null;
   alertas_ativos: boolean;
   limite_desempenho_pct: number;
   minutos_sem_comunicacao: number;
@@ -59,6 +61,7 @@ export interface DadosUsina {
   longitude: number | null;
   potencia_kwp: number;
   fuso_horario: string;
+  inicio_operacao: string | null;
 }
 
 export interface ConfigAlertas {

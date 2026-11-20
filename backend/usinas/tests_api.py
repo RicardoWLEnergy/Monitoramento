@@ -1,5 +1,5 @@
 """Testes da API de usinas, por perfil."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.utils import timezone
@@ -130,6 +130,7 @@ class UsinasApiTests(UsinasApiBase):
 
     def test_geracao_mensal_e_esperado(self):
         hoje = timezone.localdate()
+        GeracaoDiaria.objects.create(usina=self.minha, data=hoje - timedelta(days=120), energia_kwh=5)   # já operava
         GeracaoDiaria.objects.create(usina=self.minha, data=hoje, energia_kwh=30)
         GeracaoEsperada.objects.create(usina=self.minha, mes=hoje.month, energia_kwh=900)
         self.entrar(self.cliente)
@@ -138,14 +139,15 @@ class UsinasApiTests(UsinasApiBase):
         self.assertEqual((meses[-1]['gerado_kwh'], meses[-1]['esperado_kwh'], meses[-1]['parcial']),
                          (30.0, 900.0, True))
 
-    def test_geracao_esperada_so_admin_altera(self):
+    def test_geracao_esperada_equipe_altera_cliente_nao(self):
         corpo = [{'mes': m, 'energia_kwh': 1000 + m} for m in range(1, 13)]
         url = f'/api/usinas/{self.minha.pk}/geracao-esperada/'
-        self.entrar(self.colab)
+        self.entrar(self.cliente)
         self.assertEqual(self.client.put(url, corpo, format='json').status_code, 403)
-        self.entrar(self.admin)
-        r = self.client.put(url, corpo, format='json')
-        self.assertEqual((r.status_code, len(r.data)), (200, 12))
+        for usuario in (self.colab, self.admin):
+            self.entrar(usuario)
+            r = self.client.put(url, corpo, format='json')
+            self.assertEqual((r.status_code, len(r.data)), (200, 12))
 
 
 class ImportarHistoricoApiTests(UsinasApiBase):
@@ -192,6 +194,27 @@ class ImportarHistoricoApiTests(UsinasApiBase):
         self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json')
         ImportacaoHistorico.objects.update(status=ImportacaoHistorico.Status.CONCLUIDA)
         self.assertEqual(self.client.post(self.url(), {'inicio': hoje, 'fim': hoje}, format='json').status_code, 202)
+
+    def test_pedido_comeca_no_inicio_da_operacao(self):
+        from monitoramento.models import ImportacaoHistorico
+        hoje = timezone.localdate()
+        self.minha.inicio_operacao = hoje - timedelta(days=6)
+        self.minha.save()
+        self.entrar(self.colab)
+        r = self.client.post(self.url(), {'inicio': (hoje - timedelta(days=364)).isoformat(), 'fim': hoje.isoformat()},
+                             format='json')
+        self.assertEqual(r.status_code, 202)
+        self.assertEqual(ImportacaoHistorico.objects.get().inicio, hoje - timedelta(days=6))   # só os 7 dias
+        ImportacaoHistorico.objects.all().delete()
+        r = self.client.post(self.url(), {'inicio': (hoje - timedelta(days=30)).isoformat(),
+                                          'fim': (hoje - timedelta(days=10)).isoformat()}, format='json')
+        self.assertEqual(r.status_code, 400)                                  # todo o período antes de ligar
+        self.assertIn('começou a operar', r.data['detail'])
+
+    def test_equipe_corrige_o_inicio_da_operacao(self):
+        self.entrar(self.colab)
+        r = self.client.patch(f'/api/usinas/{self.minha.pk}/', {'inicio_operacao': '2025-01-15'}, format='json')
+        self.assertEqual((r.status_code, r.data['inicio_operacao']), (200, '2025-01-15'))
 
     def test_periodo_invalido(self):
         hoje = timezone.localdate()

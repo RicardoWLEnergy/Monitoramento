@@ -21,10 +21,15 @@ ESCOPOS = [
     'https://www.googleapis.com/auth/drive.readonly',
 ]
 TEMPO_LIMITE = 30
+LIMITE_ARQUIVO = 30 * 1024 * 1024   # 30 MB: maior que isso não é entregue pelo sistema
 
 
 class GoogleErro(Exception):
     """Falha ao falar com o Google (mensagem técnica: vai para o registro, não para a tela)."""
+
+
+class ArquivoGrande(GoogleErro):
+    """Documento acima de LIMITE_ARQUIVO."""
 
 
 def configurado() -> bool:
@@ -46,11 +51,14 @@ def _sessao():
     return AuthorizedSession(credenciais)
 
 
-def _get(sessao, url: str, **params):
+def _get(sessao, url: str, stream: bool = False, **params):
+    from google.auth.exceptions import GoogleAuthError
     try:
-        r = sessao.get(url, params=params, timeout=TEMPO_LIMITE)
+        r = sessao.get(url, params=params, timeout=TEMPO_LIMITE, stream=stream)
     except requests.RequestException as erro:
         raise GoogleErro(f'sem conexão com o Google ({erro.__class__.__name__})') from None
+    except GoogleAuthError as erro:   # chave revogada/apagada, relógio errado, falha ao renovar o token
+        raise GoogleErro(f'autenticação no Google recusada ({erro.__class__.__name__}): confira a chave da conta de serviço') from None
     if r.status_code != 200:
         raise GoogleErro(f'Google HTTP {r.status_code}: {_mensagem(r)}')
     return r
@@ -67,21 +75,23 @@ def ler_aba(planilha_id: str, aba: str) -> list[list[str]]:
 class Arquivo:
     nome: str
     tipo: str            # content-type (ex.: application/pdf)
-    conteudo: bytes
+    conteudo: object     # pedaços (bytes) entregues aos poucos, sem carregar o arquivo inteiro na memória
 
 
 def baixar_arquivo(arquivo_id: str) -> Arquivo:
     """Baixa um arquivo do Drive. Documentos do Google (Docs/Planilhas) são convertidos para PDF."""
     base = f'https://www.googleapis.com/drive/v3/files/{arquivo_id}'
     sessao = _sessao()
-    info = _get(sessao, base, fields='name,mimeType', supportsAllDrives='true').json()
+    info = _get(sessao, base, fields='name,mimeType,size', supportsAllDrives='true').json()
     nome, tipo = info.get('name') or 'documento', info.get('mimeType') or 'application/octet-stream'
+    if int(info.get('size') or 0) > LIMITE_ARQUIVO:
+        raise ArquivoGrande(f'arquivo {arquivo_id} com {int(info["size"]) // 1_048_576} MB (limite 30 MB)')
     if tipo.startswith('application/vnd.google-apps'):
-        r = _get(sessao, f'{base}/export', mimeType='application/pdf')
+        r = _get(sessao, f'{base}/export', stream=True, mimeType='application/pdf')
         nome, tipo = (nome if nome.lower().endswith('.pdf') else f'{nome}.pdf'), 'application/pdf'
     else:
-        r = _get(sessao, base, alt='media', supportsAllDrives='true')
-    return Arquivo(nome=nome, tipo=tipo, conteudo=r.content)
+        r = _get(sessao, base, stream=True, alt='media', supportsAllDrives='true')
+    return Arquivo(nome=nome, tipo=tipo, conteudo=r.iter_content(64 * 1024))
 
 
 def _mensagem(resposta) -> str:

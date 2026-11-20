@@ -23,7 +23,8 @@ SP = ZoneInfo('America/Sao_Paulo')
 USINAS = [
     {'plantCode': 'NE=33628081', 'plantName': 'Usina Diogo e Neide', 'capacity': 3.0,
      'latitude': '-15.617980', 'longitude': '-47.771750',
-     'plantAddress': 'Condominio alto da boa vista  QD103 CONJUNTO 04 LT 37'},
+     'plantAddress': 'Condominio alto da boa vista  QD103 CONJUNTO 04 LT 37',
+     'gridConnectionDate': '2025-03-10T02:30:00+08:00'},
     {'plantCode': 'NE=1', 'plantName': 'Outra', 'capacity': 5.0},
 ]
 DISPOSITIVOS = [
@@ -65,6 +66,7 @@ class CadastroHuaweiTests(TestCase):
         self.assertEqual((u.plataforma, u.id_externo, u.fabricante), (Plataforma.HUAWEI, 'NE=33628081', Fabricante.HUAWEI))
         self.assertEqual((u.nome, str(u.potencia_kwp), u.status), ('Usina Diogo e Neide', '3.00', Status.ONLINE))
         self.assertEqual((str(u.latitude), str(u.longitude)), ('-15.617980', '-47.771750'))
+        self.assertEqual(str(u.inicio_operacao), '2025-03-09')   # 02:30 na China = 15:30 do dia 9 em Brasília
         inv = Inversor.objects.get()                                   # só o inversor (o dongle fica de fora)
         self.assertEqual((inv.numero_serie, inv.id_externo, inv.tipo_externo, inv.modelo),
                          ('210107380110JB000260', '1000000033629201', '38', 'SUN2000L-3KTL'))

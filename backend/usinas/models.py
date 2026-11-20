@@ -60,6 +60,11 @@ class Usina(models.Model):
     longitude = models.DecimalField('longitude', max_digits=9, decimal_places=6, null=True, blank=True)
     fuso_horario = models.CharField('fuso horário', max_length=50, default='America/Sao_Paulo')
     potencia_kwp = models.DecimalField('potência instalada (kWp)', max_digits=10, decimal_places=2, default=0)
+    inicio_operacao = models.DateField(
+        'início da operação', null=True, blank=True,
+        help_text='Data de criação da usina na plataforma (a usina é criada depois de ligada). '
+                  'A importação de histórico e a geração esperada começam nela.',
+    )
 
     # --- Situação atual (atualizada a cada coleta) ---
     status = models.CharField('status', max_length=10, choices=Status.choices, default=Status.OFFLINE)

@@ -1,15 +1,22 @@
 @let p = projeto();
 @if (auth.eEquipe()) {
   <form class="consulta" (ngSubmit)="consultar()">
-    <span class="label">Ver o projeto de um cliente</span>
-    <input class="input num" name="id" [(ngModel)]="campoId" placeholder="ID do cliente (nº da obra)">
+    <label class="label" for="consulta-id">Ver o projeto de um cliente</label>
+    <input class="input num" id="consulta-id" name="id" inputmode="numeric" [(ngModel)]="campoId" placeholder="ID do cliente (nº da obra)">
     <button class="btn" type="submit">Ver projeto</button>
   </form>
 }
 @if (carregando() && !p) {
-  <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
+  <div class="vazio" role="status" aria-live="polite"><span class="spinner"></span><br>Carregando...</div>
 } @else if (erro()) {
-  <div class="alerta erro">{{ erro() }} <a href="" (click)="$event.preventDefault(); carregar()">Tentar de novo →</a></div>
+  <div class="vazio" role="alert">
+    <lucide-icon [img]="icones.CloudOff" [size]="32" [strokeWidth]="1.6" />
+    <h3>Não conseguimos carregar o seu projeto agora</h3>
+    <p>As informações da sua obra estão temporariamente indisponíveis. Isso costuma se resolver em alguns minutos.</p>
+    <button class="btn primary" type="button" (click)="carregar()">
+      <lucide-icon [img]="icones.RefreshCw" [size]="16" [strokeWidth]="1.8" /> Tentar de novo
+    </button>
+  </div>
 } @else if (!p) {
   <div class="vazio">
     @if (auth.eEquipe()) {

@@ -71,6 +71,7 @@ class FoxESSAssinaturaTests(SimpleTestCase):
 USINA_FOX = {
     'stationName': 'UFV WL Energy', 'city': 'Brasilia', 'country': 'BR',
     'address': 'CA V Pires Ch 29 Lt 01-02', 'capacity': 97.9, 'timezone': 'America/Sao_Paulo',
+    'createDate': '2024-05-23 12:35:04 BRT-0300',
     'modules': [{'moduleSN': 'M1', 'deviceSN': 'SN-A'}, {'moduleSN': 'M2', 'deviceSN': 'SN-B'}],
 }
 # Lista de inversores da conta (fonte principal do cadastro)
@@ -113,6 +114,7 @@ class CadastroPorSnTests(TestCase):
         self.assertEqual((u.nome, u.id_externo, u.plataforma), ('UFV WL Energy', 'st-1', Plataforma.FOXESS))
         self.assertEqual(u.fabricante, Fabricante.WEG)                       # SIW… = WEG
         self.assertEqual(str(u.potencia_kwp), '97.90')
+        self.assertEqual(str(u.inicio_operacao), '2024-05-23')               # createDate da plataforma
         self.assertEqual(u.status, Status.ONLINE)                            # 1 online + 1 offline
         self.assertEqual(Inversor.objects.get(numero_serie='SN-A').modelo, 'SIW200G M050 W1')
         self.assertEqual(list(self.cliente.usinas.all()), [u])

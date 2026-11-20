@@ -14,7 +14,9 @@ Regras:
 import re
 from collections import Counter
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import transaction
@@ -82,6 +84,23 @@ def _modelo_valido(valor) -> str:
     return '' if valor in ('', '-', '--') else valor
 
 
+def data_criacao_foxess(texto: str | None) -> date | None:
+    """createDate da FoxESS: '2024-05-23 12:35:04 BRT-0300' -> 23/05/2024."""
+    try:
+        return datetime.strptime((texto or '')[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def data_conexao_huawei(texto: str | None, fuso: str = 'America/Sao_Paulo') -> date | None:
+    """gridConnectionDate da Huawei: '2022-11-21T16:23:00+08:00' -> data no fuso da usina."""
+    try:
+        momento = datetime.fromisoformat(str(texto or '').strip())
+    except ValueError:
+        return None
+    return momento.astimezone(ZoneInfo(fuso)).date() if momento.tzinfo else momento.date()
+
+
 def _cadastrar_foxess(sn: str, cliente: Usuario) -> ResultadoCadastro:
     """
     Fonte principal: a LISTA de inversores da conta (traz usina, status e modelo).
@@ -137,6 +156,7 @@ def _cadastrar_foxess(sn: str, cliente: Usuario) -> ResultadoCadastro:
             'cidade': usina_info.get('city') or '',
             'fuso_horario': usina_info.get('timezone') or 'America/Sao_Paulo',
             'potencia_kwp': _decimal(usina_info.get('capacity')),
+            'inicio_operacao': data_criacao_foxess(usina_info.get('createDate')),
             'status': status_da_usina(list(status_inv.values())),
         },
         inversores={n: {
@@ -149,7 +169,8 @@ def _cadastrar_foxess(sn: str, cliente: Usuario) -> ResultadoCadastro:
 
 
 # Dados que a equipe pode corrigir no sistema: vêm da plataforma só no PRIMEIRO cadastro
-CAMPOS_CADASTRAIS = {'nome', 'endereco', 'cidade', 'uf', 'latitude', 'longitude', 'potencia_kwp', 'fuso_horario'}
+CAMPOS_CADASTRAIS = {'nome', 'endereco', 'cidade', 'uf', 'latitude', 'longitude', 'potencia_kwp', 'fuso_horario',
+                     'inicio_operacao'}
 
 
 def _gravar(plataforma: str, id_usina: str, cliente: Usuario, usina: dict, inversores: dict[str, dict]) -> ResultadoCadastro:
@@ -166,6 +187,9 @@ def _gravar(plataforma: str, id_usina: str, cliente: Usuario, usina: dict, inver
             defaults={**tecnicos, 'ativa': True, 'desativada_em': None},
             create_defaults={**usina, 'ativa': True, 'desativada_em': None},
         )
+        if not obj.inicio_operacao and usina.get('inicio_operacao'):   # usina antiga ainda sem a data
+            obj.inicio_operacao = usina['inicio_operacao']
+            obj.save(update_fields=['inicio_operacao'])
         for numero, dados in inversores.items():
             Inversor.objects.update_or_create(numero_serie=numero, defaults={'usina': obj, **dados})
         ja_vinculado = obj.usuarios.filter(pk=cliente.pk).exists()
@@ -239,6 +263,7 @@ def _cadastrar_huawei(sn: str, cliente: Usuario) -> ResultadoCadastro:
             'latitude': coordenada(info.get('latitude')),
             'longitude': coordenada(info.get('longitude')),
             'potencia_kwp': _decimal(info.get('capacity')),   # confirmado: vem em kWp
+            'inicio_operacao': data_conexao_huawei(info.get('gridConnectionDate')),
             'status': status,
         },
         inversores={(d.get('esnCode') or '').upper(): {

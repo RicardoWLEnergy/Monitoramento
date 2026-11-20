@@ -100,7 +100,7 @@
   <div class="tabela-wrap">
     <table class="tabela">
       <thead>
-        <tr><th>Cliente</th><th>ID</th><th>CPF</th><th>WhatsApp</th><th>Usinas</th><th>Acesso</th><th class="dir">Ações</th></tr>
+        <tr><th>Cliente</th><th>ID</th><th>CPF</th><th>WhatsApp</th><th>Usinas</th><th>Acesso</th>@if (auth.eAdmin()) { <th>Último acesso</th> }<th class="dir">Ações</th></tr>
       </thead>
       <tbody>
         @for (c of resultado()?.results ?? []; track c.id) {
@@ -123,6 +123,9 @@
               } @empty { <span class="sub">Nenhuma</span> }
             </td>
             <td><span class="tag" [class.ok]="c.ativo" [class.neutral]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            @if (auth.eAdmin()) {
+              <td class="num" [class.sub]="!c.last_login">{{ ultimoAcesso(c.last_login) }}</td>
+            }
             <td class="dir">
               <div class="acoes">
                 <button class="btn sm" type="button" (click)="abrirEdicao(c)">
@@ -135,7 +138,7 @@
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="7">
+          <tr><td [attr.colspan]="auth.eAdmin() ? 8 : 7">
             @if (carregando()) {
               <div class="vazio"><span class="spinner"></span><br>Carregando...</div>
             } @else if (busca()) {

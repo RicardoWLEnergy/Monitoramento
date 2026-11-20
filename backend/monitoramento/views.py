@@ -1,7 +1,7 @@
 import logging
 from urllib.parse import quote
 
-from django.http import HttpResponse
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.response import Response
@@ -114,10 +114,15 @@ class DocumentoProjetoView(APIView):
             return Response({'detail': 'Este documento ainda não está disponível.'}, status=404)
         try:
             arquivo = google.baixar_arquivo(arquivo_id)
+        except google.ArquivoGrande as erro:
+            log.warning('Documento do projeto %s (%s): %s', tipo, id_cliente, erro)
+            return Response({'detail': 'Este documento é grande demais para baixar por aqui. Fale com a W.L Energy.'},
+                            status=413)
         except google.GoogleErro as erro:
             log.warning('Documento do projeto %s (%s): %s', tipo, id_cliente, erro)
             return Response({'detail': 'Não foi possível baixar o documento agora. Tente de novo em alguns minutos.'},
                             status=502)
-        resposta = HttpResponse(arquivo.conteudo, content_type=arquivo.tipo)
-        resposta['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(arquivo.nome)}"
+        partes = [arquivo.conteudo] if isinstance(arquivo.conteudo, bytes) else arquivo.conteudo
+        resposta = StreamingHttpResponse(partes, content_type=arquivo.tipo)
+        resposta['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(arquivo.nome, safe='')}"
         return resposta

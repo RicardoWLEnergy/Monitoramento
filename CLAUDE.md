@@ -383,7 +383,7 @@ Nada de `core/`, `shared/`, `layout/` etc.
 
 ## Regras de negócio (não quebrar)
 - **Perfis**: Admin (tudo) · Colaborador (vê todas as usinas, cadastra/edita clientes, vincula, importa
-  histórico, edita dados cadastrais da usina; **não** altera alertas/geração esperada nem apaga) ·
+  histórico, edita dados cadastrais e a geração esperada (prognóstico) da usina; **não** altera alertas nem apaga) ·
   Cliente (só as próprias usinas; não vê Visão geral nem Gestão). Regras **no servidor**, em
   `usuarios/permissoes.py` — a tela só esconde.
 - **Só entra no banco o que for cadastrado**: cliente + plataforma + **SN de um inversor** → o sistema

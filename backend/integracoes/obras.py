@@ -57,6 +57,17 @@ DOCUMENTOS = {
 DIAS_UTEIS_VISTORIA = {'neoenergia': 7, 'equatorial': 5}
 
 
+def _colunas_usadas() -> set[str]:
+    """Colunas que a tela usa. Só elas ficam na cópia guardada (valor, vendedor, NF etc. ficam de fora,
+    inclusive do banco e dos backups)."""
+    colunas = {'no obra', 'n obra', 'kwp', 'cidade', 'uf', 'distribuidora', 'modulos', 'etapa engenharia',
+               'vistoria tecnica'}
+    for e in ETAPAS:
+        colunas |= {_simplificar(e[c]) for c in ('inicio', 'fim', 'previsao_inicio') if e.get(c)}
+    colunas |= {_simplificar(d['coluna']) for d in DOCUMENTOS.values()}
+    return colunas
+
+
 class PlanilhaIndisponivel(Exception):
     """Planilha não configurada ou o Google não respondeu (a tela mostra uma mensagem amigável)."""
 
@@ -83,20 +94,27 @@ def linhas_obras() -> list[dict]:
         raise PlanilhaIndisponivel(str(erro)) from None
     if not valores:
         return []
-    cabecalho = [_simplificar(c) for c in valores[0]]
-    linhas = [{coluna: (linha[i].strip() if i < len(linha) else '') for i, coluna in enumerate(cabecalho)}
+    usadas = _colunas_usadas()
+    cabecalho = [(i, _simplificar(c)) for i, c in enumerate(valores[0]) if _simplificar(c) in usadas]
+    linhas = [{coluna: (linha[i].strip() if i < len(linha) else '') for i, coluna in cabecalho}
               for linha in valores[1:]]
     cache.set(CHAVE_CACHE, linhas, VALIDADE_CACHE)
     return linhas
 
 
+def numero_obra(texto: str) -> str:
+    """Nº da obra comparável: só os dígitos, sem zeros à esquerda ('0123', '123' e '1.23' na planilha → '123')."""
+    digitos = re.sub(r'\D', '', str(texto or ''))
+    return str(int(digitos)) if digitos else ''
+
+
 def linha_do_cliente(id_cliente: str | None) -> dict | None:
     """A linha da obra do cliente (Nº OBRA = ID do cliente), ou None."""
-    if not id_cliente:
+    alvo = numero_obra(id_cliente)
+    if not alvo:
         return None
-    alvo = _simplificar(id_cliente)
     for linha in linhas_obras():
-        if _simplificar(linha.get('no obra') or linha.get('n obra') or '') == alvo:
+        if numero_obra(linha.get('no obra') or linha.get('n obra') or '') == alvo:
             return linha
     return None
 

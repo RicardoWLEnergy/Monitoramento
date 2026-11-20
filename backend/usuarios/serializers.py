@@ -82,9 +82,14 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return cpf
 
     def validate_id_cliente(self, valor):
-        """Nº da obra (chave da planilha OBRAS). Vazio = sem ID."""
-        valor = (valor or '').strip() or None
-        if valor and self._ja_existe(id_cliente=valor):
+        """Nº da obra (chave da planilha OBRAS): só números; zeros à esquerda não contam. Vazio = sem ID."""
+        valor = (valor or '').strip()
+        if not valor:
+            return None
+        if not valor.isdigit():
+            raise serializers.ValidationError('O ID do cliente tem só números.')
+        valor = str(int(valor))                   # "0123" e "123" são o mesmo cliente
+        if self._ja_existe(id_cliente=valor):
             raise serializers.ValidationError('Já existe um cliente com este ID.')
         return valor
 
@@ -125,12 +130,17 @@ class EuSerializer(UsuarioSerializer):
     """
     email = serializers.EmailField(read_only=True)
     id_cliente = serializers.CharField(read_only=True)     # quem define é a equipe
+    # Cliente sem usina (ainda em instalação) não vê "Usinas"; entra direto em "Meu projeto"
+    qtd_usinas = serializers.SerializerMethodField()
     senha_atual = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
 
     class Meta(UsuarioSerializer.Meta):
         fields = ['id', 'id_cliente', 'email', 'nome', 'whatsapp', 'cpf_formatado', 'endereco', 'link_maps', 'perfil',
-                  'last_login', 'senha_atual']
+                  'last_login', 'senha_atual', 'qtd_usinas']
         read_only_fields = ['endereco', 'perfil', 'last_login']
+
+    def get_qtd_usinas(self, obj) -> int:
+        return obj.usinas.filter(ativa=True).count()
 
     def validate(self, dados):
         senha = dados.pop('senha_atual', None)

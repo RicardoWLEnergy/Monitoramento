@@ -30,6 +30,8 @@ class DashboardEAlertasApiTests(APITestCase):
         self.assertEqual(self.client.get('/api/dashboard/').status_code, 403)
 
     def test_dashboard_da_equipe_com_todas(self):
+        # A "Minha" opera desde antes deste mês: o esperado até hoje é o do mês proporcional aos dias passados
+        GeracaoDiaria.objects.create(usina=self.minha, data=timezone.localdate() - timedelta(days=60), energia_kwh=5)
         self.client.force_authenticate(self.admin)
         d = self.client.get('/api/dashboard/').data
         self.assertEqual((d['kpis']['total'], d['kpis']['offline'], d['kpis']['alerta']), (2, 1, 1))
@@ -62,10 +64,10 @@ class DashboardEAlertasApiTests(APITestCase):
         r = self.client.get(f'/api/dashboard/geracao-diaria/?inicio={hoje - timedelta(days=1)}&fim={hoje}')
         ontem = hoje - timedelta(days=1)
         import calendar
-        por_dia = lambda d: round(80 / calendar.monthrange(d.year, d.month)[1], 3) if d.month == hoje.month else None
+        por_dia = round(80 / calendar.monthrange(hoje.year, hoje.month)[1], 3)
         self.assertEqual(r.data['dias'], [
-            {'data': ontem.isoformat(), 'kwh': None, 'esperado_kwh': por_dia(ontem)},
-            {'data': hoje.isoformat(), 'kwh': 100.0, 'esperado_kwh': por_dia(hoje)},   # só a "Minha" tem esperado (80/mês)
+            {'data': ontem.isoformat(), 'kwh': None, 'esperado_kwh': None},     # a "Minha" só começou a gerar hoje
+            {'data': hoje.isoformat(), 'kwh': 100.0, 'esperado_kwh': por_dia},   # só a "Minha" tem esperado (80/mês)
         ])
         self.assertEqual(self.client.get('/api/dashboard/geracao-diaria/?inicio=2020-01-01').status_code, 400)
 
@@ -86,9 +88,30 @@ class DashboardEAlertasApiTests(APITestCase):
         self.assertEqual(fracao_do_mes(date(2026, 11, 15)), 0.5)       # 15 de 30 dias
         self.assertEqual(fracao_do_mes(date(2026, 2, 28)), 1.0)        # último dia: mês inteiro
         GeracaoEsperada.objects.create(usina=self.minha, mes=10, energia_kwh=310)
+        GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 10, 1), energia_kwh=5)   # opera desde 01/10
         meses = geracao_mensal(Usina.objects.filter(pk=self.minha.pk), 2, hoje=date(2026, 11, 15))
         self.assertEqual([(m['esperado_kwh'], m['esperado_ate_hoje_kwh'], m['parcial']) for m in meses],
                          [(310.0, 310.0, False), (80.0, 40.0, True)])   # mês fechado: inteiro; mês atual: metade
+
+    def test_esperado_usa_o_inicio_da_operacao_cadastrado(self):
+        from datetime import date
+        GeracaoEsperada.objects.filter(usina=self.minha, mes=11).update(energia_kwh=90)
+        GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 11, 1), energia_kwh=3)   # 1ª geração: 01/11
+        self.minha.inicio_operacao = date(2026, 11, 13)                                         # mas ligou em 13/11
+        self.minha.save()
+        meses = geracao_mensal(Usina.objects.filter(pk=self.minha.pk), 1, hoje=date(2026, 11, 15))
+        self.assertEqual(meses[0]['esperado_ate_hoje_kwh'], 9.0)     # 13 a 15 = 3 dias de 30 → 90 × 3/30
+
+    def test_esperado_so_conta_depois_que_a_usina_ligou(self):
+        from datetime import date
+        GeracaoDiaria.objects.all().delete()
+        GeracaoEsperada.objects.create(usina=self.minha, mes=10, energia_kwh=310)
+        GeracaoEsperada.objects.filter(usina=self.minha, mes=11).update(energia_kwh=90)
+        GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 11, 10), energia_kwh=20)   # ligou em 10/11
+        meses = geracao_mensal(Usina.objects.filter(pk=self.minha.pk), 2, hoje=date(2026, 11, 15))
+        self.assertEqual([(m['esperado_kwh'], m['esperado_ate_hoje_kwh']) for m in meses],
+                         [(0.0, 0.0),          # outubro: a usina ainda não existia
+                          (63.0, 18.0)])       # novembro: 21 de 30 dias no mês; 6 dias até hoje (10 a 15)
 
     def test_alertas_do_cliente(self):
         self.client.force_authenticate(self.cliente)

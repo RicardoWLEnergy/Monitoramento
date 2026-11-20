@@ -255,6 +255,59 @@ class FalhaParcialTests(ColetaBase):
         self.assertEqual(float(GeracaoDiaria.objects.get(data=primeiro).energia_kwh), 0.0)
 
 
+class InicioOperacaoTests(ColetaBase):
+    def test_importacao_comeca_no_inicio_da_operacao_e_grava_zeros_depois(self):
+        hoje = timezone.localdate()
+        self.usina.inicio_operacao = hoje - timedelta(days=2)
+        self.usina.save()
+        self.api.relatorio_mensal.return_value = [{'variable': 'generation', 'values': [0.0] * 31}]
+        importar_geracao_diaria(self.usina, hoje - timedelta(days=365), hoje, api=self.api)
+        datas = sorted(g.data for g in GeracaoDiaria.objects.all())
+        self.assertEqual(datas[0], hoje - timedelta(days=2))         # nada antes do início
+        self.assertEqual(len(datas), 3)                              # zeros depois do início ficam (dia parado)
+        meses = {(c.args[1], c.args[2]) for c in self.api.relatorio_mensal.call_args_list}
+        self.assertLessEqual(len(meses), 2)                          # não pediu 12 meses à plataforma
+
+    def test_curvas_tambem_comecam_no_inicio(self):
+        hoje = timezone.localdate()
+        self.usina.inicio_operacao = hoje
+        self.usina.save()
+        self.api.historico.return_value = []
+        importar_curvas(self.usina, hoje - timedelta(days=30), hoje, api=self.api)
+        self.assertEqual(self.api.historico.call_count, 2)          # 1 dia × 2 inversores
+
+
+class DiasSemGeracaoTests(ColetaBase):
+    def test_dia_todo_zerado_nao_vira_curva(self):
+        hoje = timezone.localdate()
+
+        def historico(sn, ini, fim):
+            valor = 0.0 if ini.date() < hoje else 2.0          # antes de hoje a usina não operava
+            return [{'datas': [{'variable': 'generationPower', 'data': [
+                {'time': ini.strftime('%Y-%m-%d 10:00:00 BRT-0300'), 'value': valor},
+                {'time': ini.strftime('%Y-%m-%d 10:05:00 BRT-0300'), 'value': valor}]}]}]
+        self.api.historico.side_effect = historico
+        importar_curvas(self.usina, hoje - timedelta(days=6), hoje, api=self.api)
+        self.assertEqual({l.data_hora.astimezone(SP).date() for l in Leitura.objects.all()}, {hoje})
+
+    def test_comando_limpa_so_o_que_e_de_antes_de_ligar(self):
+        from io import StringIO
+        from django.core.management import call_command
+        hoje = timezone.localdate()
+        GeracaoDiaria.objects.create(usina=self.usina, data=hoje - timedelta(days=3), energia_kwh=0)
+        GeracaoDiaria.objects.create(usina=self.usina, data=hoje - timedelta(days=1), energia_kwh=12)  # ligou ontem
+        GeracaoDiaria.objects.create(usina=self.usina, data=hoje, energia_kwh=0)                       # parado: fica
+        antes = datetime.combine(hoje - timedelta(days=3), datetime.min.time(), SP).replace(hour=12)
+        Leitura.objects.create(usina=self.usina, data_hora=antes, potencia_kw=0)
+        saida = StringIO()
+        call_command('limpar_dias_sem_geracao', stdout=saida)                 # só mostra
+        self.assertEqual(GeracaoDiaria.objects.count(), 3)
+        self.assertIn('Seriam apagados: 1 dia(s) de energia e 1 leitura(s)', saida.getvalue())
+        call_command('limpar_dias_sem_geracao', '--aplicar', stdout=StringIO())
+        self.assertEqual(sorted(float(g.energia_kwh) for g in GeracaoDiaria.objects.all()), [0.0, 12.0])
+        self.assertFalse(Leitura.objects.exists())
+
+
 class PeriodoECoberturaTests(ColetaBase):
     def test_periodo_respeita_inicio_e_fim(self):
         hoje = timezone.localdate()

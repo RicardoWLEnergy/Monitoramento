@@ -97,6 +97,15 @@ export class ProjetoService {
   }
 }
 
+/** O erro de um download chega como arquivo (Blob): lê a mensagem do servidor ("ainda não está disponível" etc.). */
+export async function mensagemDoDownload(erro: unknown): Promise<string> {
+  const corpo = (erro as { error?: unknown })?.error;
+  if (corpo instanceof Blob) {
+    try { return JSON.parse(await corpo.text()).detail ?? 'Não foi possível baixar o documento.'; } catch { /* segue */ }
+  }
+  return 'Não foi possível baixar o documento.';
+}
+
 function salvarArquivo(resposta: HttpResponse<Blob>, padrao: string): void {
   const cabecalho = resposta.headers.get('Content-Disposition') ?? '';
   const nome = decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(cabecalho)?.[1] ?? padrao);

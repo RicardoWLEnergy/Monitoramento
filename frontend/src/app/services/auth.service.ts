@@ -7,6 +7,8 @@ export type Perfil = 'admin' | 'colaborador' | 'cliente';
 export interface Usuario {
   id: number;
   id_cliente: string | null;
+  /** Usinas ativas vinculadas (cliente sem usina = ainda em instalação). */
+  qtd_usinas: number;
   email: string;
   nome: string;
   whatsapp: string | null;
@@ -50,6 +52,10 @@ export class AuthService {
   /** Admin ou Colaborador (equipe WL). */
   readonly eEquipe = computed(() => this.perfil() === 'admin' || this.perfil() === 'colaborador');
   readonly eAdmin = computed(() => this.perfil() === 'admin');
+  /** Cliente com usina ligada (vê "Usinas"); a equipe sempre vê. */
+  readonly temUsinas = computed(() => this.eEquipe() || (this._usuario()?.qtd_usinas ?? 0) > 0);
+  /** Cliente com ID (nº da obra): vê "Meu projeto". */
+  readonly temProjeto = computed(() => !this.eEquipe() && !!this._usuario()?.id_cliente);
   readonly iniciais = computed(() =>
     (this._usuario()?.nome ?? '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join(''));
 

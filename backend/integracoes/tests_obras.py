@@ -98,6 +98,15 @@ class ProjetoDaLinhaTests(TestCase):
         p = self.montar(**{'ETAPA ENGENHARIA': '', 'PROJETO': '01/11/2026'})
         self.assertEqual(p['etapas'][3]['status'], 'andamento')     # projeto concluído → instalação
 
+    def test_copia_guardada_nao_tem_colunas_sigilosas(self):
+        cache.clear()
+        with patch('integracoes.google.ler_aba', return_value=planilha(linha())):
+            obras.linha_do_cliente('1234')
+        guardada = str(cache.get(obras.CHAVE_CACHE))
+        for sigiloso in ('Fulano', 'Financiamento', '45.000', '555', '2026-998877', 'Ana'):
+            self.assertNotIn(sigiloso, guardada)
+        self.assertIn('drive-art', guardada)                       # o que a tela usa continua lá
+
     def test_le_a_planilha_uma_vez_a_cada_5_minutos(self):
         cache.clear()
         with patch('integracoes.google.ler_aba', return_value=planilha(linha())) as ler:
@@ -129,6 +138,31 @@ class ProjetoApiTests(APITestCase):
         r = self.client.get('/api/projeto/?id_cliente=5678')
         self.assertEqual(r.data['projeto']['id_cliente'], '1234')   # o parâmetro é ignorado para o cliente
 
+    def test_numero_da_obra_com_zeros_ou_formatado_na_planilha(self):
+        self.assertEqual(obras.numero_obra('0123'), '123')
+        self.assertEqual(obras.numero_obra('1.234'), '1234')
+        self.assertEqual(obras.numero_obra(''), '')
+        self.ana.id_cliente = '123'
+        self.ana.save()
+        self.ler.stop()
+        with patch('integracoes.google.ler_aba', return_value=planilha(linha(**{'Nº OBRA': '0123'}))):
+            cache.clear()
+            self.client.force_authenticate(self.ana)
+            self.assertIsNotNone(self.client.get('/api/projeto/').data['projeto'])
+        self.ler.start()
+
+    @patch('integracoes.google._sessao')
+    def test_chave_revogada_vira_indisponivel_e_nao_erro_500(self, sessao):
+        from google.auth.exceptions import RefreshError
+        self.ler.stop()
+        sessao.return_value.get.side_effect = RefreshError('invalid_grant')
+        cache.clear()
+        self.client.force_authenticate(self.ana)
+        with self.assertLogs('monitoramento.views', level='WARNING'):
+            r = self.client.get('/api/projeto/')
+        self.assertEqual(r.status_code, 503)
+        self.ler.start()
+
     def test_cliente_sem_id_ou_sem_linha(self):
         sem = Usuario.objects.create_user('sem@x.com', 'x', nome='Sem')
         self.client.force_authenticate(sem)
@@ -143,7 +177,7 @@ class ProjetoApiTests(APITestCase):
         self.client.force_authenticate(self.ana)
         r = self.client.get('/api/projeto/documentos/art/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.content, b'%PDF')
+        self.assertEqual(b''.join(r.streaming_content), b'%PDF')
         baixar.assert_called_once_with('drive-art')                 # nunca o arquivo da Bia
         self.assertIn('attachment', r['Content-Disposition'])
 
@@ -186,12 +220,22 @@ class GoogleTests(TestCase):
 
     @patch('integracoes.google._sessao')
     def test_documento_do_google_vira_pdf(self, sessao):
+        pdf = self.resposta()
+        pdf.iter_content.return_value = [b'%PDF-', b'prancha']
         sessao.return_value.get.side_effect = [
-            self.resposta(dados={'name': 'Prancha', 'mimeType': 'application/vnd.google-apps.document'}),
-            self.resposta(conteudo=b'%PDF-prancha')]
+            self.resposta(dados={'name': 'Prancha', 'mimeType': 'application/vnd.google-apps.document'}), pdf]
         arquivo = google.baixar_arquivo('drive-prancha')
-        self.assertEqual((arquivo.nome, arquivo.tipo, arquivo.conteudo), ('Prancha.pdf', 'application/pdf', b'%PDF-prancha'))
+        self.assertEqual((arquivo.nome, arquivo.tipo, b''.join(arquivo.conteudo)),
+                         ('Prancha.pdf', 'application/pdf', b'%PDF-prancha'))   # entregue em partes
         self.assertTrue(sessao.return_value.get.call_args.args[0].endswith('/export'))
+
+    @patch('integracoes.google._sessao')
+    def test_arquivo_acima_de_30_mb_nao_e_baixado(self, sessao):
+        sessao.return_value.get.return_value = self.resposta(
+            dados={'name': 'Enorme.pdf', 'mimeType': 'application/pdf', 'size': str(80 * 1024 * 1024)})
+        with self.assertRaises(google.ArquivoGrande):
+            google.baixar_arquivo('drive-enorme')
+        self.assertEqual(sessao.return_value.get.call_count, 1)   # nem começa a baixar
 
     @override_settings(GOOGLE_CREDENCIAIS='nao-e-base64-nem-json')
     def test_chave_invalida_vira_google_erro(self):

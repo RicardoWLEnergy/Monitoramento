@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard, equipeGuard, inicioGuard, visitanteGuard } from './services/auth.guard';
+import { adminGuard, authGuard, equipeGuard, inicioGuard, usinasGuard, visitanteGuard } from './services/auth.guard';
 import { ShellComponent } from './pages/shell/shell.component';
 
 export const routes: Routes = [
@@ -24,11 +24,13 @@ export const routes: Routes = [
       },
       {
         path: 'usinas',
+        canActivate: [usinasGuard],
         loadComponent: () => import('./pages/usinas/usinas.component').then(m => m.UsinasComponent),
         title: 'Usinas · W.L Energy',
       },
       {
         path: 'usinas/:id',
+        canActivate: [usinasGuard],
         loadComponent: () => import('./pages/usina-detalhe/usina-detalhe.component').then(m => m.UsinaDetalheComponent),
         title: 'Usina · W.L Energy',
       },

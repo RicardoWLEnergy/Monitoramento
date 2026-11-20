@@ -8,7 +8,7 @@ import {
   ChevronLeft, ChevronRight, ExternalLink, LucideAngularModule, Pencil, Plus, Search, SolarPanel, X,
 } from 'lucide-angular';
 
-import { mensagemDeErro } from '../../services/auth.service';
+import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { plural } from '../../services/formato';
 import { PLATAFORMAS, Pagina, Plataforma } from '../../services/usinas.service';
 import { NovoUsuario, ResultadoVinculo, UsuarioCadastro, UsuariosService } from '../../services/usuarios.service';
@@ -39,6 +39,7 @@ const formularioVazio = (): Formulario => ({
 })
 export class ClientesComponent {
   private readonly api = inject(UsuariosService);
+  readonly auth = inject(AuthService);
 
   readonly icones = { ChevronLeft, ChevronRight, ExternalLink, Pencil, Plus, Search, SolarPanel, X };
   readonly plataformas = PLATAFORMAS;
@@ -147,6 +148,12 @@ export class ClientesComponent {
       this.enviando.set(false);
       this.recarregar.update(n => n + 1);
     }
+  }
+
+  /** Último acesso do cliente (coluna só para o Admin). */
+  ultimoAcesso(iso: string | null): string {
+    if (!iso) return 'Nunca acessou';
+    return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
   whatsappFormatado(numero: string | null): string {

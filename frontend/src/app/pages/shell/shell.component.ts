@@ -11,7 +11,11 @@ import { LogoComponent } from './logo.component';
 import { MenuContaComponent } from './menu-conta.component';
 
 interface ItemMenu {
-  rota: string; rotulo: string; icone: LucideIconData; soAdmin?: boolean; soEquipe?: boolean; soCliente?: boolean;
+  rota: string; rotulo: string; icone: LucideIconData; soAdmin?: boolean; soEquipe?: boolean;
+  /** Só para quem tem usina (cliente ainda em instalação não vê). */
+  comUsinas?: boolean;
+  /** Só para o cliente com ID do cliente (nº da obra). */
+  comProjeto?: boolean;
 }
 
 const CHAVE_RECOLHIDA = 'wl-sidebar-recolhida';
@@ -38,8 +42,8 @@ export class ShellComponent {
 
   readonly monitoramento: ItemMenu[] = [
     { rota: '/visao-geral', rotulo: 'Visão geral', icone: LayoutDashboard, soEquipe: true },
-    { rota: '/usinas',      rotulo: 'Usinas',      icone: SolarPanel },
-    { rota: '/projeto',     rotulo: 'Meu projeto', icone: ListChecks, soCliente: true },
+    { rota: '/usinas',      rotulo: 'Usinas',      icone: SolarPanel, comUsinas: true },
+    { rota: '/projeto',     rotulo: 'Meu projeto', icone: ListChecks, comProjeto: true },
   ];
 
   /** Gestão: Admin e Colaborador veem Clientes; só o Admin vê Usuários. */

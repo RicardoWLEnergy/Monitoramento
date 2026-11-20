@@ -1,8 +1,9 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Check, ChevronDown, LucideAngularModule, MapPin } from 'lucide-angular';
+import { Check, ChevronDown, CloudOff, LucideAngularModule, MapPin, RefreshCw } from 'lucide-angular';
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { dataBR, diaMesBR, diasEntre, hojeIso } from '../../services/periodo';
@@ -33,7 +34,9 @@ export class ProjetoComponent {
   /** Equipe: ID do cliente consultado (?id_cliente= no endereço). O cliente sempre vê o próprio. */
   readonly idConsulta = signal<string | null>(null);
   campoId = '';
-  readonly icones = { Check, ChevronDown, MapPin };
+  /** Busca em andamento: uma nova (outro ID ou "Tentar de novo") cancela a anterior. */
+  private busca: Subscription | null = null;
+  readonly icones = { Check, ChevronDown, CloudOff, MapPin, RefreshCw };
   readonly dataBR = dataBR;
 
   readonly projeto = signal<Projeto | null>(null);
@@ -64,9 +67,10 @@ export class ProjetoComponent {
     const media = window.matchMedia(MEDIA_CELULAR);
     const mudou = (ev: MediaQueryListEvent) => { this.celular.set(ev.matches); this.aberta.set(true); };
     media.addEventListener('change', mudou);
-    inject(DestroyRef).onDestroy(() => media.removeEventListener('change', mudou));
+    inject(DestroyRef).onDestroy(() => { media.removeEventListener('change', mudou); this.busca?.unsubscribe(); });
     this.rota.queryParamMap.subscribe(q => {
       const id = this.auth.eEquipe() ? q.get('id_cliente') : null;
+      if (id !== this.idConsulta()) this.projeto.set(null);   // outro cliente: não mostra o projeto anterior
       this.idConsulta.set(id);
       this.campoId = id ?? '';
       this.carregar();
@@ -86,7 +90,8 @@ export class ProjetoComponent {
       this.carregando.set(false);
       return;
     }
-    this.api.meuProjeto(this.idConsulta()).subscribe({
+    this.busca?.unsubscribe();
+    this.busca = this.api.meuProjeto(this.idConsulta()).subscribe({
       next: p => {
         this.projeto.set(p);
         // Abre na etapa atual (ou na última, se tudo já estiver concluído)

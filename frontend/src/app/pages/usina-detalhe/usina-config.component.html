@@ -14,6 +14,8 @@
           <input class="input" name="d-nome" [(ngModel)]="dados.nome" required></label>
         <label class="campo"><span class="label">Potência instalada (kWp)</span>
           <input class="input num" type="number" min="0" step="0.01" name="d-kwp" [(ngModel)]="dados.potencia_kwp"></label>
+        <label class="campo"><span class="label">Início da operação</span>
+          <input class="input num" type="date" name="d-inicio" [max]="hoje" [(ngModel)]="dados.inicio_operacao"></label>
         <label class="campo"><span class="label">Fuso horário</span>
           <select class="input" name="d-fuso" [(ngModel)]="dados.fuso_horario">
             @for (f of fusos; track f) { <option [value]="f">{{ f }}</option> }
@@ -57,7 +59,8 @@
       </div>
       <div class="campos">
         <label class="campo"><span class="label">De</span>
-          <input class="input" type="date" name="hist-inicio" [(ngModel)]="periodo.inicio" [max]="periodo.fim"></label>
+          <input class="input" type="date" name="hist-inicio" [(ngModel)]="periodo.inicio" [max]="periodo.fim"
+                 [min]="usina().inicio_operacao ?? ''"></label>
         <label class="campo"><span class="label">Até</span>
           <input class="input" type="date" name="hist-fim" [(ngModel)]="periodo.fim" [max]="hoje"></label>
         <label class="check largo">
@@ -98,7 +101,10 @@
       }
 
       <div class="rodape-secao">
-        <span class="sub">Tempo estimado: <b>{{ estimativaTexto }}</b> · pode fechar a página: a importação continua no servidor.</span>
+        <span class="sub">
+          @if (usina().inicio_operacao) { A usina opera desde {{ usina().inicio_operacao | date: 'dd/MM/yyyy' }}: dias anteriores não são importados. }
+          Tempo estimado: <b>{{ estimativaTexto }}</b> · pode fechar a página: a importação continua no servidor.
+        </span>
         @if (aviso()['historico']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
         <button class="btn primary" type="button" (click)="importarHistorico()" [disabled]="salvando() === 'historico' || importando()">
           @if (salvando() === 'historico' || importando()) { <span class="spinner"></span> Importando... }
@@ -135,7 +141,6 @@
     <div>
       <h3>Geração esperada</h3>
       <span class="sub">kWh por mês · base do "gerado × esperado"</span>
-      @if (!auth.eAdmin()) { <span class="sub somente">Somente administradores alteram.</span> }
     </div>
     <div class="campos-col">
       <div class="meses">
@@ -143,18 +148,16 @@
           <label class="campo">
             <span class="label">{{ m }}</span>
             <input class="input num" type="number" min="0" step="1" [name]="'mes' + i"
-                   [(ngModel)]="esperado[i]" [disabled]="!auth.eAdmin()">
+                   [(ngModel)]="esperado[i]">
           </label>
         }
       </div>
       <div class="rodape-secao">
         <span class="sub">Total no ano: <b class="num">{{ totalEsperado | number: '1.0-0' }} kWh</b></span>
         @if (aviso()['esperado']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
-        @if (auth.eAdmin()) {
-          <button class="btn primary" type="button" (click)="salvarEsperado()" [disabled]="salvando() === 'esperado'">
-            {{ salvando() === 'esperado' ? 'Salvando...' : 'Salvar geração esperada' }}
-          </button>
-        }
+        <button class="btn primary" type="button" (click)="salvarEsperado()" [disabled]="salvando() === 'esperado'">
+          {{ salvando() === 'esperado' ? 'Salvando...' : 'Salvar geração esperada' }}
+        </button>
       </div>
     </div>
   </section>
