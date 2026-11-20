@@ -5,13 +5,16 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { forkJoin, map } from 'rxjs';
 import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
 import {
+  ChevronLeft, ChevronRight,
   ArrowLeft, CalendarDays, ChartLine, Clock, Cloud, CloudRain, Cpu, ExternalLink, Gauge, LucideAngularModule, MapPin,
   Settings, Sun, Zap,
 } from 'lucide-angular';
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { GraficosService, echarts, textoClima } from '../../services/graficos.service';
-import { atalhosPeriodo, hojeIso, resumoPeriodo } from '../../services/periodo';
+import {
+  ESCALAS, Escala, agruparPorMes, deslocar, hojeIso, intervaloDa, resumoPeriodo,
+} from '../../services/periodo';
 import {
   CLASSE_STATUS, Curva, GeracaoPeriodo, Inversor, MesGeracao, ROTULO_STATUS, UsinaDetalhe, UsinasService,
 } from '../../services/usinas.service';
@@ -35,7 +38,7 @@ export class UsinaDetalheComponent {
   private readonly rota = inject(ActivatedRoute);
   readonly auth = inject(AuthService);
 
-  readonly icones = { ArrowLeft, CalendarDays, ChartLine, Clock, Cpu, ExternalLink, Gauge, MapPin, Settings, Zap };
+  readonly icones = { ChevronLeft, ChevronRight, ArrowLeft, CalendarDays, ChartLine, Clock, Cpu, ExternalLink, Gauge, MapPin, Settings, Zap };
   readonly iconeClima = { ensolarado: Sun, nublado: Cloud, chuvoso: CloudRain };
   readonly textoClima = textoClima;
   readonly rotuloStatus = ROTULO_STATUS;
@@ -57,9 +60,20 @@ export class UsinaDetalheComponent {
 
   // Gráfico de cima: "Dia" (curva de potência) ou "Período" (energia de cada dia)
   readonly modo = signal<Modo>('dia');
-  readonly atalhos = atalhosPeriodo();
-  readonly inicioPeriodo = signal(this.atalhos[1].inicio);
-  readonly fimPeriodo = signal(this.atalhos[1].fim);
+  // Período: semana / mês / ano com ‹ › (padrão: o mês atual) ou intervalo personalizado
+  readonly escalas = ESCALAS;
+  readonly escala = signal<Escala>('mes');
+  readonly referencia = signal(hojeIso());
+  readonly inicioPeriodo = signal(intervaloDa('mes', hojeIso()).inicio);   // usados no "Personalizado"
+  readonly fimPeriodo = signal(hojeIso());
+  readonly intervalo = computed(() => {
+    const e = this.escala();
+    return e === 'personalizado'
+      ? { inicio: this.inicioPeriodo(), fim: this.fimPeriodo(), rotulo: '' }
+      : intervaloDa(e, this.referencia());
+  });
+  /** Não avança além do período atual. */
+  readonly podeAvancar = computed(() => this.intervalo().fim < this.hoje);
   readonly periodo = signal<GeracaoPeriodo | null>(null);
   readonly erroPeriodo = signal<string | null>(null);
 
@@ -84,7 +98,10 @@ export class UsinaDetalheComponent {
   readonly temEsperado = computed(() => this.historico().some(m => m.esperado_kwh > 0));
 
   readonly resumoPeriodo = computed(() => resumoPeriodo(this.periodo()?.dias ?? []));
-  readonly opcoesPeriodo = computed(() => this.graficos.geracaoDiaria(this.periodo()?.dias ?? [], this.hoje));
+  readonly opcoesPeriodo = computed(() => this.escala() === 'ano'
+    ? this.graficos.geracaoMensal(
+      agruparPorMes(this.periodo()?.dias ?? [], Number(this.intervalo().inicio.slice(0, 4)), this.hoje), 'kWh')
+    : this.graficos.geracaoDiaria(this.periodo()?.dias ?? [], this.hoje));
 
   readonly opcoesCurva = computed(() => this.graficos.curvaPotencia(this.curva()?.pontos ?? []));
   readonly opcoesHistorico = computed(() => this.graficos.geracaoMensal(this.historico()));
@@ -145,9 +162,32 @@ export class UsinaDetalheComponent {
     this.carregarPeriodo();
   }
 
+  /** Semana / Mês / Ano / Personalizado. */
+  mudarEscala(escala: Escala): void {
+    if (escala === 'personalizado') {           // começa com o período que estava na tela
+      this.inicioPeriodo.set(this.intervalo().inicio);
+      this.fimPeriodo.set(this.fimAteHoje());
+    }
+    this.escala.set(escala);
+    this.carregarPeriodo();
+  }
+
+  /** ‹ volta e › avança uma semana, um mês ou um ano. */
+  navegar(passo: number): void {
+    const e = this.escala();
+    if (e === 'personalizado' || (passo > 0 && !this.podeAvancar())) return;
+    this.referencia.set(deslocar(e, this.referencia(), passo));
+    this.carregarPeriodo();
+  }
+
+  /** Fim do período sem passar de hoje (não há dados do futuro). */
+  private fimAteHoje(): string {
+    return this.intervalo().fim < this.hoje ? this.intervalo().fim : this.hoje;
+  }
+
   carregarPeriodo(): void {
     this.erroPeriodo.set(null);
-    this.api.geracaoDiaria(this.id, this.inicioPeriodo(), this.fimPeriodo()).subscribe({
+    this.api.geracaoDiaria(this.id, this.intervalo().inicio, this.fimAteHoje()).subscribe({
       next: p => this.periodo.set(p),
       error: e => {
         this.periodo.set(null);
@@ -156,9 +196,16 @@ export class UsinaDetalheComponent {
     });
   }
 
-  /** Clique numa barra do período: abre a curva de potência daquele dia. */
+  /** Clique numa barra: no Ano abre o mês; nos demais, a curva de potência do dia. */
   abrirDia(indice: number | undefined): void {
-    const dia = indice === undefined ? null : this.periodo()?.dias[indice];
+    if (indice === undefined) return;
+    if (this.escala() === 'ano') {
+      this.referencia.set(`${this.intervalo().inicio.slice(0, 4)}-${String(indice + 1).padStart(2, '0')}-01`);
+      this.escala.set('mes');
+      this.carregarPeriodo();
+      return;
+    }
+    const dia = this.periodo()?.dias[indice];
     if (!dia) return;
     this.modo.set('dia');
     this.mudarDia(dia.data);

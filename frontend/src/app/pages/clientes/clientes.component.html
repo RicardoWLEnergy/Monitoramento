@@ -98,14 +98,14 @@
   </div>
 
   <div class="tabela-wrap">
-    <table class="tabela">
+    <table class="tabela em-cartoes">
       <thead>
         <tr><th>Cliente</th><th>ID</th><th>CPF</th><th>WhatsApp</th><th>Usinas</th><th>Acesso</th>@if (auth.eAdmin()) { <th>Último acesso</th> }<th class="dir">Ações</th></tr>
       </thead>
       <tbody>
         @for (c of resultado()?.results ?? []; track c.id) {
           <tr>
-            <td>
+            <td class="principal">
               <div class="forte">{{ c.nome }}</div>
               <div class="sub">{{ c.email }}</div>
               @if (c.link_maps) {
@@ -114,17 +114,17 @@
                 </a>
               }
             </td>
-            <td class="num">{{ c.id_cliente || '—' }}</td>
-            <td class="num">{{ c.cpf_formatado || '—' }}</td>
-            <td class="num">{{ c.whatsapp ? whatsappFormatado(c.whatsapp) : '—' }}</td>
-            <td>
+            <td class="num" data-rotulo="ID">{{ c.id_cliente || '—' }}</td>
+            <td class="num" data-rotulo="CPF">{{ c.cpf_formatado || '—' }}</td>
+            <td class="num" data-rotulo="WhatsApp">{{ c.whatsapp ? whatsappFormatado(c.whatsapp) : '—' }}</td>
+            <td data-rotulo="Usinas">
               @for (u of c.usinas; track u.id) {
                 <a class="usina" [routerLink]="['/usinas', u.id]">{{ u.nome }}</a>
               } @empty { <span class="sub">Nenhuma</span> }
             </td>
-            <td><span class="tag" [class.ok]="c.ativo" [class.neutral]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            <td data-rotulo="Acesso"><span class="tag" [class.ok]="c.ativo" [class.neutral]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span></td>
             @if (auth.eAdmin()) {
-              <td class="num" [class.sub]="!c.last_login">{{ ultimoAcesso(c.last_login) }}</td>
+              <td class="num" data-rotulo="Último acesso" [class.sub]="!c.last_login">{{ ultimoAcesso(c.last_login) }}</td>
             }
             <td class="dir">
               <div class="acoes">
@@ -163,10 +163,10 @@
                   (click)="mudarPorPagina(n)">{{ n }}</button>
         }
       </div>
-      <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1">
-        <lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> Anterior</button>
-      <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()">
-        Próxima <lucide-icon [img]="icones.ChevronRight" [size]="14" [strokeWidth]="2" /></button>
+      <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1" aria-label="Página anterior">
+        <lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> <span class="txt-passo">Anterior</span></button>
+      <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()" aria-label="Próxima página">
+        <span class="txt-passo">Próxima</span> <lucide-icon [img]="icones.ChevronRight" [size]="14" [strokeWidth]="2" /></button>
     </div>
   </footer>
 </section>

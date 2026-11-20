@@ -26,8 +26,10 @@
 
 /* ---------- Responsivo ---------- */
 @media (max-width: 600px) {
-  .painel-topo { flex-direction: column; align-items: stretch; }
+  .cabecalho, .painel-topo, .paginacao { flex-direction: column; align-items: stretch; }
   .busca { max-width: none; }
+  .paginas { justify-content: flex-end; }
+  .por-pagina { margin-right: auto; }
 }
 
 .painel-topo h3 { font-size: 16px; }

@@ -88,8 +88,8 @@
           @if (modo() === 'dia') {
             <h3>Potência ao longo do dia</h3>
           } @else {
-            <h3>Geração por dia</h3>
-            <span class="sub">Clique num dia para ver a curva de potência</span>
+            <h3>{{ escala() === 'ano' ? 'Geração por mês' : 'Geração por dia' }}</h3>
+            <span class="sub">{{ escala() === 'ano' ? 'Clique num mês para ver os dias' : 'Clique num dia para ver a curva de potência' }}</span>
           }
         </div>
         <div class="controles">
@@ -100,7 +100,7 @@
           @if (modo() === 'dia') {
             <input class="input data" type="date" [max]="hoje" [value]="dataCurva()"
                    (change)="mudarDia($any($event.target).value)" aria-label="Dia da curva">
-          } @else {
+          } @else if (escala() === 'personalizado') {
             <span class="datas">
               <input class="input data" type="date" [max]="fimPeriodo()" [value]="inicioPeriodo()"
                      (change)="mudarPeriodo($any($event.target).value, fimPeriodo())" aria-label="Início do período">
@@ -127,10 +127,20 @@
           }
         </div>
       } @else {
-        <div class="chips">
-          @for (a of atalhos; track a.rotulo) {
-            <button class="chip" type="button" [class.ativo]="inicioPeriodo() === a.inicio && fimPeriodo() === a.fim"
-                    (click)="mudarPeriodo(a.inicio, a.fim)">{{ a.rotulo }}</button>
+        <div class="navegacao-periodo">
+          <div class="chips">
+            @for (e of escalas; track e.valor) {
+              <button class="chip" type="button" [class.ativo]="escala() === e.valor" (click)="mudarEscala(e.valor)">{{ e.rotulo }}</button>
+            }
+          </div>
+          @if (escala() !== 'personalizado') {
+            <div class="passos">
+              <button class="btn sm" type="button" (click)="navegar(-1)" aria-label="Período anterior">
+                <lucide-icon [img]="icones.ChevronLeft" [size]="16" [strokeWidth]="2" /></button>
+              <strong class="rotulo-periodo" aria-live="polite">{{ intervalo().rotulo }}</strong>
+              <button class="btn sm" type="button" (click)="navegar(1)" [disabled]="!podeAvancar()" aria-label="Próximo período">
+                <lucide-icon [img]="icones.ChevronRight" [size]="16" [strokeWidth]="2" /></button>
+            </div>
           }
         </div>
         @let r = resumoPeriodo();

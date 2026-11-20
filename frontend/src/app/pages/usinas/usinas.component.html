@@ -132,11 +132,11 @@
                   (click)="mudarPorPagina(n)">{{ n }}</button>
         }
       </div>
-      <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1">
-        <lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> Anterior</button>
+      <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1" aria-label="Página anterior">
+        <lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> <span class="txt-passo">Anterior</span></button>
       <span class="num">{{ pagina() }} / {{ totalPaginas() }}</span>
-      <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()">
-        Próxima <lucide-icon [img]="icones.ChevronRight" [size]="14" [strokeWidth]="2" /></button>
+      <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()" aria-label="Próxima página">
+        <span class="txt-passo">Próxima</span> <lucide-icon [img]="icones.ChevronRight" [size]="14" [strokeWidth]="2" /></button>
     </div>
   </footer>
 </section>

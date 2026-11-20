@@ -39,8 +39,11 @@ legend { padding: 0; margin-bottom: 12px; }
 @media (max-width: 600px) {
   .campos { grid-template-columns: 1fr; }
   .largo { grid-column: auto; }
-  .lista-topo, .cabecalho { flex-direction: column; align-items: stretch; }
+  .lista-topo, .cabecalho, .paginacao { flex-direction: column; align-items: stretch; }
   .busca { max-width: none; }
+  .paginas { justify-content: flex-end; }
+  .por-pagina { margin-right: auto; }
+  .usina { display: inline; margin-left: 8px; }
 }
 /* Itens por página: discreto, à direita junto de Anterior/Próxima */
 .por-pagina { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }

@@ -56,10 +56,6 @@
 /* Dia / Período */
 .controles { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
 .datas { display: inline-flex; align-items: center; gap: 8px; }
-.resumo-periodo { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 0; }
-.resumo-periodo dd {
-  margin: 4px 0 0; font: 700 18px var(--font-display); font-variant-numeric: tabular-nums;
-}
 @media (max-width: 600px) {
   .card-topo { flex-direction: column; }
   .controles { justify-content: flex-start; }

@@ -292,3 +292,26 @@ select.input { appearance: auto; }
 .marcador-etapa.concluida { background: var(--wl-orange); color: var(--wl-black); }
 .marcador-etapa.andamento { background: var(--txt); color: var(--wl-orange); }
 .marcador-etapa.proxima { background: var(--card); color: var(--wl-gray-500); box-shadow: inset 0 0 0 2px var(--hairline); }
+
+/* ---------- Navegação do modo Período (Semana / Mês / Ano com ‹ ›) ---------- */
+.navegacao-periodo { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.navegacao-periodo .passos { display: inline-flex; align-items: center; gap: 10px; }
+.navegacao-periodo .passos .btn { padding: 5px 8px; }
+.rotulo-periodo { min-width: 15ch; text-align: center; font: 600 15px var(--font-display); font-variant-numeric: tabular-nums; }
+
+/* Resumo do período (total, média, esperado...): linha de apoio discreta, sem competir com o gráfico */
+.resumo-periodo { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0; }
+.resumo-periodo dd { margin: 2px 0 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Celular ---------- */
+@media (max-width: 600px) {
+  /* No iPhone, campo com letra menor que 16px dá zoom na tela ao tocar (o !important vence os campos menores das telas) */
+  .input { font-size: 16px !important; }
+  .card { padding: 16px; }
+  .resumo-periodo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+  .navegacao-periodo { flex-direction: column; align-items: stretch; }
+  .navegacao-periodo .passos { justify-content: space-between; }
+  .navegacao-periodo .rotulo-periodo { flex: 1; min-width: 0; }
+  .datas { flex-wrap: wrap; }
+  .txt-passo { display: none; }   /* "Anterior"/"Próxima" viram só as setas */
+}

@@ -31,18 +31,18 @@
   </div>
 
   <div class="tabela-wrap">
-    <table class="tabela">
+    <table class="tabela em-cartoes">
       <thead><tr><th>Usuário</th><th>Perfil</th><th>Último acesso</th><th>Acesso</th><th class="dir">Ações</th></tr></thead>
       <tbody>
         @for (u of resultado()?.results ?? []; track u.id) {
           <tr>
-            <td>
+            <td class="principal">
               <div class="forte">{{ u.nome }} @if (u.id === auth.usuario()?.id) { <span class="sub">(você)</span> }</div>
               <div class="sub">{{ u.email }}</div>
             </td>
-            <td><span class="tag" [class.info]="u.perfil === 'admin'" [class.neutral]="u.perfil !== 'admin'">{{ rotuloPerfil[u.perfil] }}</span></td>
-            <td class="sub">{{ ultimoAcesso(u.last_login) }}</td>
-            <td><span class="tag" [class.ok]="u.ativo" [class.neutral]="!u.ativo">{{ u.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            <td data-rotulo="Perfil"><span class="tag" [class.info]="u.perfil === 'admin'" [class.neutral]="u.perfil !== 'admin'">{{ rotuloPerfil[u.perfil] }}</span></td>
+            <td class="sub" data-rotulo="Último acesso">{{ ultimoAcesso(u.last_login) }}</td>
+            <td data-rotulo="Acesso"><span class="tag" [class.ok]="u.ativo" [class.neutral]="!u.ativo">{{ u.ativo ? 'Ativo' : 'Inativo' }}</span></td>
             <td class="dir">
               <button class="btn sm" type="button" (click)="abrirEdicao(u)">
                 <lucide-icon [img]="icones.Pencil" [size]="14" [strokeWidth]="1.7" /> Editar
