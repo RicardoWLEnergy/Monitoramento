@@ -156,6 +156,13 @@
   <footer class="paginacao">
     <span class="label">Página {{ pagina() }} de {{ totalPaginas() }}</span>
     <div class="paginas">
+      <div class="por-pagina" role="group" aria-label="Itens por página">
+        <span class="sub">Exibir</span>
+        @for (n of opcoesPorPagina; track n) {
+          <button class="chip" type="button" [class.ativo]="n === porPagina()" [attr.aria-pressed]="n === porPagina()"
+                  (click)="mudarPorPagina(n)">{{ n }}</button>
+        }
+      </div>
       <button class="btn sm" (click)="irPara(pagina() - 1)" [disabled]="pagina() <= 1">
         <lucide-icon [img]="icones.ChevronLeft" [size]="14" [strokeWidth]="2" /> Anterior</button>
       <button class="btn sm" (click)="irPara(pagina() + 1)" [disabled]="pagina() >= totalPaginas()">

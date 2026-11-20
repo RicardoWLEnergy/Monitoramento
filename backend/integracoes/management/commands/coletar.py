@@ -20,7 +20,9 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections
 from django.utils import timezone
 
-from integracoes.coletor import Clientes, Trava, ciclo_tempo_real, processar_fila, rotina_diaria
+from integracoes.coletor import (
+    Clientes, Trava, atualizar_clima_recente, ciclo_tempo_real, processar_fila, rotina_diaria,
+)
 
 log = logging.getLogger('coletor')
 
@@ -87,6 +89,10 @@ class Command(BaseCommand):
     @staticmethod
     def tempo_livre(clientes: Clientes, proximo_ciclo: float) -> None:
         """Até o próximo ciclo de tempo real: importações da fila; sem nada na fila, olha de novo a cada 10 s."""
+        # Clima (secundário): só se sobrar folga antes do próximo ciclo, com prazo que termina antes dele
+        folga = proximo_ciclo - time.monotonic() - FOLGA
+        if folga > 30:
+            atualizar_clima_recente(segundos=min(60, folga - 10))
         while time.monotonic() < proximo_ciclo:
             close_old_connections()
             try:

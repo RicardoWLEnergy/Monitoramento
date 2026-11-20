@@ -7,7 +7,9 @@ from rest_framework.test import APITestCase
 from usinas.models import Fabricante, GeracaoEsperada, Plataforma, Status, Usina
 from usuarios.models import Usuario
 
-from .consultas import fracao_do_mes, geracao_mensal
+import calendar
+
+from .consultas import geracao_mensal
 from .models import Alerta, GeracaoDiaria, Leitura
 
 
@@ -39,7 +41,8 @@ class DashboardEAlertasApiTests(APITestCase):
         self.assertEqual(d['atencao'][0]['nome'], 'Alheia')   # offline vem primeiro
         self.assertEqual([a['motivo'] for a in d['atencao']], ['Sem comunicação', 'Inversor 2 abaixo'])
         # 40 kWh gerados × esperado ATÉ HOJE (80 kWh do mês proporcional aos dias passados)
-        pct = round(40 / (80 * fracao_do_mes(timezone.localdate())) * 100, 1)
+        hoje = timezone.localdate()
+        pct = round(40 / (80 * hoje.day / calendar.monthrange(hoje.year, hoje.month)[1]) * 100, 1)
         self.assertEqual(d['menor_desempenho'], [{'id': self.minha.pk, 'nome': 'Minha', 'pct': pct}])
         self.assertEqual(d['kpis']['desempenho_mes_pct'], pct)
         self.assertEqual(d['kpis']['esperado_mes_kwh'], 80.0)
@@ -85,8 +88,6 @@ class DashboardEAlertasApiTests(APITestCase):
 
     def test_esperado_ate_hoje_e_proporcional_aos_dias_do_mes(self):
         from datetime import date
-        self.assertEqual(fracao_do_mes(date(2026, 11, 15)), 0.5)       # 15 de 30 dias
-        self.assertEqual(fracao_do_mes(date(2026, 2, 28)), 1.0)        # último dia: mês inteiro
         GeracaoEsperada.objects.create(usina=self.minha, mes=10, energia_kwh=310)
         GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 10, 1), energia_kwh=5)   # opera desde 01/10
         meses = geracao_mensal(Usina.objects.filter(pk=self.minha.pk), 2, hoje=date(2026, 11, 15))

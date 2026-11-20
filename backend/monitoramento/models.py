@@ -161,3 +161,28 @@ class ImportacaoHistorico(models.Model):
         for f in falhas:
             if f not in self.falhas and len(self.falhas) < self.MAX_FALHAS:
                 self.falhas.append(f)
+
+
+class ClimaDiario(models.Model):
+    """Clima do dia na usina (Open-Meteo): ensolarado, nublado ou chuvoso, e a chuva em mm."""
+
+    class Condicao(models.TextChoices):
+        ENSOLARADO = 'ensolarado', 'Ensolarado'
+        NUBLADO = 'nublado', 'Nublado'
+        CHUVOSO = 'chuvoso', 'Chuvoso'
+
+    usina = models.ForeignKey(Usina, on_delete=models.CASCADE, related_name='clima', verbose_name='usina')
+    data = models.DateField('data')
+    condicao = models.CharField('condição', max_length=10, choices=Condicao.choices)
+    chuva_mm = models.FloatField('chuva (mm)', default=0)
+    codigo = models.PositiveSmallIntegerField('código WMO', null=True, blank=True)
+    atualizado_em = models.DateTimeField('atualizado em', auto_now=True)
+
+    class Meta:
+        verbose_name = 'clima do dia'
+        verbose_name_plural = 'clima por dia'
+        ordering = ['usina', '-data']
+        constraints = [models.UniqueConstraint(fields=['usina', 'data'], name='clima_unico_por_dia')]
+
+    def __str__(self):
+        return f'{self.usina} · {self.data:%d/%m/%Y} · {self.get_condicao_display()}'

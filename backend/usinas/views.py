@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -5,6 +7,7 @@ from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from integracoes.clima import clima_por_dia
 from integracoes.coleta import cobertura
 from monitoramento.consultas import anotar_usinas, curva_do_dia, geracao_mensal, geracao_por_dia, ler_data, ler_periodo
 from monitoramento.models import ImportacaoHistorico
@@ -89,7 +92,8 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         except ValueError as erro:
             raise serializers.ValidationError({'data': str(erro)})
         usina = self.get_object()
-        return Response({'data': dia.isoformat(), 'fuso': usina.fuso_horario, 'pontos': curva_do_dia(usina, dia)})
+        return Response({'data': dia.isoformat(), 'fuso': usina.fuso_horario, 'pontos': curva_do_dia(usina, dia),
+                         'clima': clima_por_dia(usina, dia, dia).get(dia)})
 
     @action(detail=True, url_path='geracao-diaria')
     def geracao_diaria(self, request, pk=None):
@@ -100,6 +104,9 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
             raise serializers.ValidationError({'detail': str(erro)})
         usina = self.get_object()
         dias = geracao_por_dia(Usina.objects.filter(pk=usina.pk), inicio, fim)
+        climas = clima_por_dia(usina, inicio, fim)
+        for d in dias:
+            d['clima'] = climas.get(date.fromisoformat(d['data']))
         return Response({'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'dias': dias})
 
     @action(detail=True, url_path='geracao-mensal')

@@ -5,11 +5,12 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { forkJoin, map } from 'rxjs';
 import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
 import {
-  ArrowLeft, CalendarDays, ChartLine, Clock, Cpu, ExternalLink, Gauge, LucideAngularModule, MapPin, Settings, Zap,
+  ArrowLeft, CalendarDays, ChartLine, Clock, Cloud, CloudRain, Cpu, ExternalLink, Gauge, LucideAngularModule, MapPin,
+  Settings, Sun, Zap,
 } from 'lucide-angular';
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
-import { GraficosService, echarts } from '../../services/graficos.service';
+import { GraficosService, echarts, textoClima } from '../../services/graficos.service';
 import { atalhosPeriodo, hojeIso, resumoPeriodo } from '../../services/periodo';
 import {
   CLASSE_STATUS, Curva, GeracaoPeriodo, Inversor, MesGeracao, ROTULO_STATUS, UsinaDetalhe, UsinasService,
@@ -35,6 +36,8 @@ export class UsinaDetalheComponent {
   readonly auth = inject(AuthService);
 
   readonly icones = { ArrowLeft, CalendarDays, ChartLine, Clock, Cpu, ExternalLink, Gauge, MapPin, Settings, Zap };
+  readonly iconeClima = { ensolarado: Sun, nublado: Cloud, chuvoso: CloudRain };
+  readonly textoClima = textoClima;
   readonly rotuloStatus = ROTULO_STATUS;
   readonly classeStatus = CLASSE_STATUS;
 

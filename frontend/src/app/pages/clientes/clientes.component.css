@@ -42,3 +42,8 @@ legend { padding: 0; margin-bottom: 12px; }
   .lista-topo, .cabecalho { flex-direction: column; align-items: stretch; }
   .busca { max-width: none; }
 }
+/* Itens por página: discreto, à direita junto de Anterior/Próxima */
+.por-pagina { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }
+.por-pagina .chip { padding: 3px 9px; font-size: 12px; background: transparent; border-color: transparent; color: var(--muted); }
+.por-pagina .chip.ativo { border-color: var(--hairline); color: var(--txt); font-weight: 600; }
+.por-pagina .sub { color: var(--muted); font-size: 12px; margin-right: 4px; }

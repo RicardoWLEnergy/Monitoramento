@@ -12,6 +12,10 @@
 # --- Backups do banco (Docker) ---
 backups/
 
+# --- Modo manutenção (o arquivo manutencao.ligada só existe no servidor enquanto a manutenção durar) ---
+manutencao/*
+!manutencao/.gitkeep
+
 # --- Ambiente virtual Python ---
 venv/
 .venv/

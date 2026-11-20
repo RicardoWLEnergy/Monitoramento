@@ -149,6 +149,7 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 |---|---|
 | `coletar` | coleta automática: tempo real a cada 5 min + rotina diária (energia dos últimos dias, curva de ontem, partições) + importações de histórico pedidas na tela |
 | `coletar --uma-vez` | um ciclo completo e sai (bom para testar) |
+| `atualizar_clima [--dias 90]` | preenche o clima do dia (ensolarado/nublado/chuvoso, Open-Meteo) dos dias passados; o coletor já atualiza ontem e hoje a cada 3 h |
 | `preencher_inicio_operacao [--aplicar]` | busca na plataforma a data de criação/conexão das usinas sem "início da operação" (sem `--aplicar`, só mostra; Huawei faz 1 login) |
 | `limpar_dias_sem_geracao [--aplicar]` | apaga energia/leituras zeradas de antes de cada usina começar a operar (sem `--aplicar`, só mostra) |
 | `particoes_leitura` | cria as partições dos próximos meses e remove as antigas (o coletor já faz isso todo dia) |
@@ -271,7 +272,21 @@ git pull
 docker compose up -d --build
 docker compose exec backend python manage.py migrate
 ```
-Mudou só o `Caddyfile`? Basta `docker compose restart web`.
+Mudou só o `Caddyfile`? Valide e reinicie: `docker compose run --rm web caddy validate --config
+/etc/caddy/Caddyfile --adapter caddyfile` e depois `docker compose restart web`. Se mudou também algo em
+`frontend/` (ex.: `public/manutencao.html`), é preciso recompilar: `docker compose up -d --build web`.
+
+### Página de manutenção
+- **Automática:** enquanto a API reinicia (ex.: durante o `up -d --build`) ou se ela cair, quem estiver usando
+  vê a página "Estamos atualizando o sistema", que confere a cada 15 s e volta sozinha para a tela de antes.
+- **Planejada:** para colocar o sistema todo em manutenção (ex.: antes de uma migração grande):
+  ```bash
+  touch manutencao/manutencao.ligada                           # liga (a pasta já vem no repositório)
+  rm manutencao/manutencao.ligada                              # desliga
+  ```
+  Vale na hora (não precisa reiniciar nada). O `/admin` pelo túnel SSH continua funcionando.
+- Se o **servidor inteiro** cair, a página não aparece (não há quem responda).
+- Depois de uma atualização, quem estava com o sistema aberto recarrega sozinho para a versão nova.
 
 ### Painel /admin (só pelo servidor)
 O backend escuta em `127.0.0.1:8001` **dentro** do servidor. Do seu computador, abra um túnel SSH:

@@ -67,6 +67,14 @@ class UsinaEdicaoSerializer(serializers.ModelSerializer):
         model = Usina
         fields = CAMPOS_CADASTRAIS + CAMPOS_ALERTAS
 
+    def validate_inicio_operacao(self, valor):
+        """No máximo hoje (data futura pararia a coleta e zeraria o esperado) e não antes de 2000."""
+        if valor and valor > timezone.localdate():
+            raise serializers.ValidationError('O início da operação não pode ser uma data futura.')
+        if valor and valor.year < 2000:
+            raise serializers.ValidationError('Data inválida.')
+        return valor
+
     def validate_nome(self, valor):
         if not valor.strip():
             raise serializers.ValidationError('Informe o nome da usina.')
@@ -95,6 +103,11 @@ class GeracaoEsperadaSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeracaoEsperada
         fields = ['mes', 'energia_kwh']
+
+    def validate_energia_kwh(self, valor):
+        if valor is not None and valor < 0:
+            raise serializers.ValidationError('A geração esperada não pode ser negativa.')
+        return valor
 
 
 class VinculoClientesSerializer(serializers.Serializer):

@@ -241,9 +241,9 @@ class GeracaoDiariaApiTests(UsinasApiBase):
         r = self.client.get(self.url(inicio='2026-11-01', fim='2026-11-03'))
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['dias'], [
-            {'data': '2026-11-01', 'kwh': 288.4, 'esperado_kwh': 300.0},
-            {'data': '2026-11-02', 'kwh': None, 'esperado_kwh': 300.0},     # sem dado: não vira zero
-            {'data': '2026-11-03', 'kwh': 301.25, 'esperado_kwh': 300.0},
+            {'data': '2026-11-01', 'kwh': 288.4, 'esperado_kwh': 300.0, 'clima': None},
+            {'data': '2026-11-02', 'kwh': None, 'esperado_kwh': 300.0, 'clima': None},     # sem dado: não vira zero
+            {'data': '2026-11-03', 'kwh': 301.25, 'esperado_kwh': 300.0, 'clima': None},
         ])
 
     def test_sem_geracao_esperada_o_esperado_do_dia_e_vazio(self):
@@ -251,7 +251,7 @@ class GeracaoDiariaApiTests(UsinasApiBase):
         GeracaoDiaria.objects.create(usina=self.minha, data=date(2026, 10, 31), energia_kwh=10)
         self.entrar(self.admin)
         r = self.client.get(self.url(inicio='2026-10-31', fim='2026-10-31'))
-        self.assertEqual(r.data['dias'], [{'data': '2026-10-31', 'kwh': 10.0, 'esperado_kwh': None}])
+        self.assertEqual(r.data['dias'], [{'data': '2026-10-31', 'kwh': 10.0, 'esperado_kwh': None, 'clima': None}])
 
     def test_cliente_nao_ve_usina_alheia(self):
         self.entrar(self.cliente)
@@ -315,3 +315,38 @@ class ApagarUsinaApiTests(UsinasApiBase):
         self.assertEqual(self.client.get('/api/dashboard/').data['kpis']['total'], 1)
         self.entrar(self.cliente)
         self.assertEqual(self.client.get('/api/usinas/').data['results'], [])
+
+
+class PaginacaoApiTests(UsinasApiBase):
+    def test_tela_escolhe_o_tamanho_da_pagina(self):
+        for i in range(12):
+            criar_usina(id_externo=f'P{i}', nome=f'Usina P{i:02d}')
+        self.entrar(self.admin)
+        r = self.client.get('/api/usinas/?tamanho=10&ordem=nome')
+        self.assertEqual((r.data['count'], len(r.data['results'])), (14, 10))
+        r = self.client.get('/api/usinas/?tamanho=10&ordem=nome&page=2')
+        self.assertEqual(len(r.data['results']), 4)
+        self.assertEqual(len(self.client.get('/api/usinas/').data['results']), 14)       # padrão: 20 por página
+        self.assertEqual(len(self.client.get('/api/usinas/?tamanho=999').data['results']), 14)   # máximo 100
+
+
+class ValidacoesApiTests(UsinasApiBase):
+    def test_inicio_da_operacao_nao_pode_ser_futuro(self):
+        from datetime import timedelta
+        self.entrar(self.admin)
+        amanha = (timezone.localdate() + timedelta(days=1)).isoformat()
+        r = self.client.patch(f'/api/usinas/{self.minha.pk}/', {'inicio_operacao': amanha}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('futura', str(r.data['inicio_operacao']))
+
+    def test_prognostico_nao_pode_ser_negativo(self):
+        self.entrar(self.admin)
+        r = self.client.put(f'/api/usinas/{self.minha.pk}/geracao-esperada/', [{'mes': 1, 'energia_kwh': -5}],
+                            format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_data_futura_da_plataforma_e_ignorada(self):
+        from integracoes.cadastro import data_criacao_foxess
+        self.assertIsNone(data_criacao_foxess('2099-01-01 10:00:00 BRT-0300'))
+        self.assertIsNone(data_criacao_foxess(None))
+        self.assertEqual(str(data_criacao_foxess('2024-05-23 12:35:04 BRT-0300')), '2024-05-23')

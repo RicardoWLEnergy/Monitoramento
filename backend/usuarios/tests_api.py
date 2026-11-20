@@ -256,6 +256,9 @@ class IdClienteApiTests(ApiBase):
         r = self.client.post('/api/usuarios/', {'nome': 'D', 'email': 'd@x.com', 'id_cliente': 'A-12'}, format='json')
         self.assertEqual(r.status_code, 400)
         self.assertIn('só números', str(r.data['id_cliente']))
+        for invalido in ('²', '0', '12 3'):     # "²" passava no isdigit() e dava erro 500
+            r = self.client.post('/api/usuarios/', {'nome': 'D', 'email': 'd@x.com', 'id_cliente': invalido}, format='json')
+            self.assertEqual(r.status_code, 400, invalido)
         r = self.client.post('/api/usuarios/', {'nome': 'E', 'email': 'e@x.com', 'id_cliente': '0123'}, format='json')
         self.assertEqual(Usuario.objects.get(email='e@x.com').id_cliente, '123')
         r = self.client.post('/api/usuarios/', {'nome': 'F', 'email': 'f@x.com', 'id_cliente': '123'}, format='json')

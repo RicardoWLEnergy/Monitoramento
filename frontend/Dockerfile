@@ -7,5 +7,5 @@ COPY . .
 RUN npx ng build --configuration production
 
 # Etapa 2: a imagem final tem só o Caddy + as telas prontas
-FROM caddy:2-alpine
+FROM caddy:2.10-alpine
 COPY --from=compilar /app/dist/frontend/browser /srv

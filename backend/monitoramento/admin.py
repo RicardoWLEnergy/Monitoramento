@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Alerta, GeracaoDiaria, ImportacaoHistorico
+from .models import Alerta, ClimaDiario, GeracaoDiaria, ImportacaoHistorico
 
 # Leitura não aparece aqui: o Django não permite /admin para tabelas com chave
 # primária composta (e são milhões de linhas). Consulte pelo Beekeeper ou pela API.
@@ -31,4 +31,13 @@ class ImportacaoHistoricoAdmin(admin.ModelAdmin):
     list_display = ('usina', 'inicio', 'fim', 'curvas', 'status', 'passos_feitos', 'passos_total', 'criado_em')
     list_filter = ('status',)
     search_fields = ('usina__nome',)
+    list_select_related = ('usina',)
+
+
+@admin.register(ClimaDiario)
+class ClimaDiarioAdmin(admin.ModelAdmin):
+    list_display = ('usina', 'data', 'condicao', 'chuva_mm', 'atualizado_em')
+    list_filter = ('condicao',)
+    search_fields = ('usina__nome',)
+    date_hierarchy = 'data'
     list_select_related = ('usina',)

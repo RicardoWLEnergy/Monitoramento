@@ -35,7 +35,7 @@ class Command(BaseCommand):
         if any(u.plataforma == Plataforma.HUAWEI for u in usinas):
             try:
                 datas_huawei = {str(p.get('plantCode')): p.get('gridConnectionDate') for p in cliente_huawei().listar_usinas()}
-            except (HuaweiErro, ValueError) as erro:
+            except Exception as erro:   # noqa: BLE001
                 self.stderr.write(f'Huawei indisponível: {erro}')
         foxess = None
         preenchidas = 0
@@ -45,7 +45,7 @@ class Command(BaseCommand):
                 try:
                     foxess = foxess or cliente_foxess()
                     data = data_criacao_foxess((foxess.detalhe_usina(usina.id_externo) or {}).get('createDate'))
-                except (FoxESSErro, ValueError) as erro:
+                except Exception as erro:   # noqa: BLE001 — uma usina com problema não para as outras
                     self.stderr.write(f'{usina.nome}: FoxESS indisponível ({erro})')
             elif usina.plataforma == Plataforma.HUAWEI:
                 data = data_conexao_huawei(datas_huawei.get(usina.id_externo), usina.fuso_horario)

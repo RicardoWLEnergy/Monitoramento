@@ -146,6 +146,8 @@ HUAWEI_SENHA = env('HUAWEI_SENHA', default='')
 # uazapi (WhatsApp): envio do código de acesso no login. URL = endereço do servidor no painel da uazapi
 UAZAPI_URL = env('UAZAPI_URL', default='')
 UAZAPI_TOKEN = env('UAZAPI_TOKEN', default='')   # token da INSTÂNCIA
+# Clima (Open-Meteo): grátis só para uso NÃO comercial. Com o plano comercial, a chave vai aqui.
+OPEN_METEO_CHAVE = env('OPEN_METEO_CHAVE', default='')
 # Google (planilha OBRAS e documentos no Drive), com uma conta de serviço só de leitura.
 # GOOGLE_CREDENCIAIS = conteúdo do arquivo JSON da chave, em base64 (ou o próprio JSON)
 GOOGLE_CREDENCIAIS = env('GOOGLE_CREDENCIAIS', default='')
@@ -157,8 +159,7 @@ PLANILHA_OBRAS_ABA = env('PLANILHA_OBRAS_ABA', default='OBRAS')
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],  # tudo exige login
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'DEFAULT_PAGINATION_CLASS': 'backend.paginacao.Paginacao',   # 20 por página; a tela pode pedir ?tamanho=
     'DEFAULT_FILTER_BACKENDS': ['rest_framework.filters.SearchFilter', 'rest_framework.filters.OrderingFilter'],
     'SEARCH_PARAM': 'busca',      # ?busca=texto
     'ORDERING_PARAM': 'ordem',    # ?ordem=nome  /  ?ordem=-potencia_kwp

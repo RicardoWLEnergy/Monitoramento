@@ -6,7 +6,7 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import { CanvasRenderer } from 'echarts/renderers';
 import { TemaService } from './tema.service';
 import { diaMesBR } from './periodo';
-import { DiaGeracao, MesGeracao, PontoCurva } from './usinas.service';
+import { ClimaDia, DiaGeracao, MesGeracao, PontoCurva, ROTULO_CLIMA } from './usinas.service';
 
 // Só os módulos usados entram no pacote (tree-shaking)
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -15,12 +15,26 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendCompone
 export { echarts };
 
 interface Cores {
+  info: string;
   acento: string; referencia: string; texto: string; secundario: string; linha: string; superficie: string;
 }
 
 const AREA_ACENTO = 'rgba(239, 150, 0, 0.10)';
 
 const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+/** Ícones do clima (desenhos Lucide: sun, cloud, cloud-rain) como imagem para o ECharts. */
+const DESENHO_CLIMA = {
+  ensolarado: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  nublado: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
+  chuvoso: '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6M8 14v6M12 16v6"/>',
+};
+const imagemClima = (desenho: string, cor: string) => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${cor}" stroke-width="2" ` +
+  `stroke-linecap="round" stroke-linejoin="round">${desenho}</svg>`);
+/** "Chuvoso · 12 mm" (a chuva só aparece a partir de 1 mm). */
+export const textoClima = (c: ClimaDia) =>
+  (ROTULO_CLIMA[c.condicao] ?? '') + (c.chuva_mm >= 1 ? ` · ${numeroBR(c.chuva_mm, 0)} mm` : '');
 
 export const numeroBR = (v: number, casas = 0) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -68,9 +82,12 @@ export class GraficosService {
     const c = this.cores();
     const b = this.base(c);
     const temEsperado = dias.some(d => d.esperado_kwh);
+    // Ícone do clima em cima das barras só em períodos curtos (em períodos longos fica só no texto do mouse)
+    const comClima = dias.length <= 31 && dias.some(d => d.clima);
+    const corClima = { ensolarado: c.acento, nublado: c.secundario, chuvoso: c.info };
     return {
       ...b.comum,
-      grid: { ...b.comum.grid, top: 44 },
+      grid: { ...b.comum.grid, top: comClima ? 60 : 44 },
       legend: {
         top: 0, right: 0, itemWidth: 14, itemHeight: 8, itemGap: 16,
         textStyle: { color: c.secundario, fontSize: 12, fontFamily: 'Inter' },
@@ -96,6 +113,7 @@ export class GraficosService {
               html += `<br><span style="color:${c.secundario}">${numeroBR(d.kwh / d.esperado_kwh * 100)}% do esperado</span>`;
             }
           }
+          if (d.clima) html += `<br><span style="color:${c.secundario}">Clima: ${textoClima(d.clima)}</span>`;
           return html;
         },
       },
@@ -104,6 +122,15 @@ export class GraficosService {
       series: [{
         name: 'Gerado', type: 'bar', barMaxWidth: 24, cursor: 'pointer',
         itemStyle: { color: c.acento, borderRadius: [4, 4, 0, 0] },
+        label: comClima ? {
+          show: true, position: 'top', distance: 4,
+          formatter: (p: { dataIndex: number }) => {
+            const clima = dias[p.dataIndex].clima;
+            return clima ? `{${clima.condicao}|}` : '';
+          },
+          rich: Object.fromEntries((Object.keys(DESENHO_CLIMA) as (keyof typeof DESENHO_CLIMA)[]).map(k =>
+            [k, { width: 14, height: 14, backgroundColor: { image: imagemClima(DESENHO_CLIMA[k], corClima[k]) } }])),
+        } : undefined,
         data: dias.map(d => (d.data === hoje && d.kwh !== null ? { value: d.kwh, itemStyle: { opacity: 0.45 } } : d.kwh)),
         emphasis: { disabled: true },
       },
@@ -181,7 +208,7 @@ export class GraficosService {
     const css = getComputedStyle(document.documentElement);
     const v = (n: string) => css.getPropertyValue(n).trim();
     return {
-      acento: v('--wl-orange'), referencia: v('--muted'), texto: v('--txt'),
+      info: v('--info-txt'), acento: v('--wl-orange'), referencia: v('--muted'), texto: v('--txt'),
       secundario: v('--muted'), linha: v('--line'), superficie: v('--card'),
     };
   }

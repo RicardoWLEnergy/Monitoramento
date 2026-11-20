@@ -12,7 +12,8 @@ import {
 
 type Coluna = 'nome' | 'fabricante' | 'potencia_kwp' | 'potencia_atual_kw' | 'geracao_hoje_kwh' | 'status';
 
-const POR_PAGINA = 20;   // igual ao PAGE_SIZE da API
+/** Itens por página que a pessoa pode escolher (enviado à API em ?tamanho=). */
+const OPCOES_POR_PAGINA = [10, 20];
 
 /** Usinas: lista com busca, filtros, ordenação e paginação feitos na API. */
 @Component({
@@ -40,12 +41,16 @@ export class UsinasComponent {
   readonly carregando = signal(true);
   readonly erro = signal<string | null>(null);
 
+  readonly opcoesPorPagina = OPCOES_POR_PAGINA;
+  readonly porPagina = signal(OPCOES_POR_PAGINA[0]);
+
   private readonly filtro = computed(() => ({
     busca: this.busca().trim(),
     status: this.status(),
     fabricante: this.fabricante(),
     ordem: (this.ordem().asc ? '' : '-') + this.ordem().coluna,
     page: this.pagina(),
+    tamanho: this.porPagina(),
   }));
 
   /** Recarrega a lista sempre que um filtro muda (com uma pequena espera para a digitação). */
@@ -64,12 +69,12 @@ export class UsinasComponent {
 
   readonly resumo = signal<ResumoUsinas | null>(null);
 
-  readonly totalPaginas = computed(() => Math.max(1, Math.ceil((this.resultado()?.count ?? 0) / POR_PAGINA)));
+  readonly totalPaginas = computed(() => Math.max(1, Math.ceil((this.resultado()?.count ?? 0) / this.porPagina())));
   readonly intervalo = computed(() => {
     const total = this.resultado()?.count ?? 0;
     if (!total) return '0 de 0';
-    const ini = (this.pagina() - 1) * POR_PAGINA + 1;
-    return `${ini}–${Math.min(this.pagina() * POR_PAGINA, total)} de ${total}`;
+    const ini = (this.pagina() - 1) * this.porPagina() + 1;
+    return `${ini}–${Math.min(this.pagina() * this.porPagina(), total)} de ${total}`;
   });
   readonly temFiltro = computed(() => !!(this.busca().trim() || this.status() || this.fabricante()));
 
@@ -95,6 +100,12 @@ export class UsinasComponent {
     const o = this.ordem();
     return o.coluna === coluna ? (o.asc ? '↑' : '↓') : '';
   }
+  /** Itens por página (10 ou 20): volta para a 1ª página. */
+  mudarPorPagina(n: number): void {
+    this.porPagina.set(n);
+    this.pagina.set(1);
+  }
+
   irPara(p: number): void { this.pagina.set(Math.min(Math.max(1, p), this.totalPaginas())); }
 
   // ---------- Auxiliares ----------

@@ -25,7 +25,7 @@ from monitoramento.models import ImportacaoHistorico
 from monitoramento.particoes import criar_particoes, remover_particoes_antigas
 from usinas.models import Plataforma, Usina
 
-from . import coleta, coleta_huawei
+from . import clima, coleta, coleta_huawei
 from .huawei import HuaweiLoginErro
 
 log = logging.getLogger('coletor')
@@ -82,6 +82,29 @@ def ciclo_tempo_real(clientes: Clientes) -> Resumo:
             log.exception('Tempo real %s falhou', plataforma)
             resumo.erros.append(f'{plataforma}: {erro}')
     return resumo
+
+
+INTERVALO_CLIMA = 3 * 60 * 60   # segundos entre atualizações do clima de hoje
+_ultimo_clima = {'quando': None}
+
+
+def atualizar_clima_recente(segundos: float = 60, forcar: bool = False) -> None:
+    """
+    Clima de ontem e de hoje das usinas ativas, no máximo a cada 3 h e só no TEMPO LIVRE do coletor,
+    com prazo de `segundos`. É informação secundária: qualquer erro só vai para o log.
+    """
+    agora = time.monotonic()
+    if not forcar and _ultimo_clima['quando'] is not None and agora - _ultimo_clima['quando'] < INTERVALO_CLIMA:
+        return
+    _ultimo_clima['quando'] = agora
+    hoje = timezone.localdate()
+    try:
+        dias = clima.atualizar_clima(Usina.objects.ativas(), hoje - timedelta(days=1), hoje, segundos=segundos)
+        log.info('Clima: %s registro(s) atualizado(s).', dias)
+    except clima.ClimaErro as erro:
+        log.warning('Clima indisponível: %s', erro)
+    except Exception:   # noqa: BLE001 — o clima nunca pode atrapalhar a coleta
+        log.exception('Clima falhou')
 
 
 def rotina_diaria(clientes: Clientes, dias_energia: int = 3) -> Resumo:
@@ -181,6 +204,12 @@ def _iniciar(imp: ImportacaoHistorico) -> None:
     imp.passos_total = len(coleta._meses_do_periodo(imp.inicio, imp.cursor)) + _passos_curva(imp)
     log.info('Importação de histórico iniciada: %s (%s a %s).', imp.usina.nome,
              f'{imp.inicio:%d/%m/%Y}', f'{imp.fim:%d/%m/%Y}')
+    try:   # o clima do período vem junto (rápido e sem atrapalhar a importação)
+        clima.atualizar_clima([imp.usina], imp.inicio, imp.fim, segundos=20)
+    except clima.ClimaErro as erro:
+        log.warning('Clima do período indisponível (%s): %s', imp.usina.nome, erro)
+    except Exception:   # noqa: BLE001
+        log.exception('Clima do período falhou (%s)', imp.usina.nome)
 
 
 def _ir_para_curva_ou_concluir(imp: ImportacaoHistorico, clientes: Clientes) -> None:

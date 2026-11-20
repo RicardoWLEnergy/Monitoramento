@@ -1,11 +1,44 @@
 # Portaria do sistema (Caddy). O endereço vem do .env:
 #   sem domínio → SITE_ADDRESS=https://IP_DO_SERVIDOR      e TLS_MODO=internal (certificado próprio)
 #   com domínio → SITE_ADDRESS=monitoramento.wlenergy.com.br e TLS_MODO=seu-email (certificado oficial)
+# Cabeçalhos de segurança (usados no site e nas respostas de erro/manutenção).
+# Os hashes sha256 da política de conteúdo são dos scripts do index.html (tema) e do manutencao.html:
+# se um deles mudar, atualize o hash aqui.
+(seguranca) {
+header {
+	# Navegador só acessa por HTTPS (1 ano). Com certificado próprio (TLS_MODO=internal) é ignorado.
+	Strict-Transport-Security "max-age=31536000"
+	X-Content-Type-Options nosniff
+	X-Frame-Options DENY
+	Referrer-Policy strict-origin-when-cross-origin
+	Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+	# Política de conteúdo em modo "só observa": não bloqueia nada, só avisa no console do navegador.
+	# Depois de alguns dias sem avisos, trocar por "Content-Security-Policy" para passar a valer.
+	Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'sha256-edDWMAAT81a8TAWdtrRTqbF7i1tMbszTD8AS/XmrISA=' 'sha256-jxbo/jJNp/0uVACdxUd0oU484/cmuHsVLgMi9lwNIVY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+	-Server
+}
+}
+
 {$SITE_ADDRESS} {
 	tls {$TLS_MODO}
 
 	# Compacta as respostas (carrega mais rápido)
 	encode zstd gzip
+
+	# Modo manutenção planejado: existindo o arquivo manutencao/manutencao.ligada (pasta ao lado do
+	# docker-compose.yml), tudo responde "em manutenção". Liga: touch manutencao/manutencao.ligada
+	# Desliga: rm manutencao/manutencao.ligada   (o /admin pelo túnel SSH não passa pelo Caddy: continua)
+	@manutencao {
+		file {
+			root /manutencao
+			try_files /manutencao.ligada
+		}
+		# o logo e o ícone da própria página de manutenção continuam sendo servidos
+		not path /ENERGYWL.png /favicon.ico
+	}
+	handle @manutencao {
+		error 503
+	}
 
 	# API e arquivos do Django → Gunicorn.
 	# O painel /admin NÃO passa por aqui (fechado para a internet): acesso só pelo servidor,
@@ -15,24 +48,45 @@
 		reverse_proxy backend:8000
 	}
 
-	# Todo o resto → telas do Angular (rotas como /usinas/3 abrem o index.html)
+	# Todo o resto → telas do Angular
 	handle {
 		root * /srv
-		try_files {path} /index.html
+		# Rotas da tela (ex.: /usinas/3) abrem o index.html. Arquivos .js/.css NÃO: se não existirem
+		# (versão antiga aberta no navegador), respondem "não encontrado" e a tela recarrega a versão nova.
+		@rotas not path *.js *.css
+		try_files @rotas {path} /index.html
+		# Arquivos de tela têm o nome mudado a cada versão: os que existem ficam em cache por 1 ano.
+		# O resto (index.html e as rotas) é sempre conferido, para ninguém ficar com a versão antiga.
+		@versionados {
+			path *.js *.css
+			file
+		}
+		@demais not path *.js *.css
+		header @versionados Cache-Control "public, max-age=31536000, immutable"
+		header @demais Cache-Control "no-cache"
 		file_server
 	}
 
-	# Cabeçalhos de segurança
-	header {
-		# Navegador só acessa por HTTPS (1 ano). Com certificado próprio (TLS_MODO=internal) é ignorado.
-		Strict-Transport-Security "max-age=31536000"
-		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy strict-origin-when-cross-origin
-		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-		# Política de conteúdo em modo "só observa": não bloqueia nada, só avisa no console do navegador.
-		# Depois de alguns dias sem avisos, trocar por "Content-Security-Policy" para passar a valer.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'sha256-edDWMAAT81a8TAWdtrRTqbF7i1tMbszTD8AS/XmrISA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
-		-Server
+	# API fora do ar (reiniciando/atualizando) ou modo manutenção: a API responde "manutencao": true
+	# (a tela abre a página de manutenção) e as telas recebem a página de manutenção, que volta sozinha.
+	handle_errors 502 503 504 {
+		import seguranca
+		@api path /api/*
+		handle @api {
+			header Content-Type application/json
+			header Cache-Control "no-store"
+			respond `{"detail": "Sistema em manutenção. Tente de novo em instantes.", "manutencao": true}` 503
+		}
+		handle {
+			root * /srv
+			rewrite * /manutencao.html
+			header Cache-Control "no-store"
+			file_server {
+				status 503
+			}
+		}
 	}
+
+	# Cabeçalhos de segurança (também nas respostas de erro e na página de manutenção)
+	import seguranca
 }

@@ -113,11 +113,19 @@
       </div>
 
       @if (modo() === 'dia') {
-        @if (curva()?.pontos?.length) {
-          <div class="grafico" echarts [options]="opcoesCurva()"></div>
-        } @else {
-          <div class="vazio">Sem leituras neste dia.</div>
-        }
+        <div class="area-grafico">
+          @if (curva()?.clima; as cl) { @if (iconeClima[cl.condicao]) {
+            <span class="clima" [class]="cl.condicao">
+              <lucide-icon [img]="iconeClima[cl.condicao]" [size]="15" [strokeWidth]="2" />
+              {{ dataCurva() === hoje ? 'Hoje: ' : '' }}{{ textoClima(cl) }}
+            </span>
+          } }
+          @if (curva()?.pontos?.length) {
+            <div class="grafico" echarts [options]="opcoesCurva()"></div>
+          } @else {
+            <div class="vazio">Sem leituras neste dia.</div>
+          }
+        </div>
       } @else {
         <div class="chips">
           @for (a of atalhos; track a.rotulo) {

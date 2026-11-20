@@ -3,6 +3,7 @@ Consultas de geração usadas pela API (lista de usinas, detalhe e dashboard).
 Recebem sempre um conjunto de usinas JÁ filtrado pelo perfil do usuário.
 """
 import calendar
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -21,12 +22,6 @@ MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', '
 def _primeiro_dia(d: date, meses_atras: int = 0) -> date:
     total = d.year * 12 + d.month - 1 - meses_atras
     return date(total // 12, total % 12 + 1, 1)
-
-
-def fracao_do_mes(hoje: date) -> float:
-    """Parte do mês já passada, contando o dia de hoje (ex.: dia 15 de um mês de 30 dias = 0,5).
-    Base do "esperado até hoje": no meio do mês compara com metade do esperado do mês, não com o mês inteiro."""
-    return hoje.day / calendar.monthrange(hoje.year, hoje.month)[1]
 
 
 def dias_operando(mes_inicio: date, ate: date, inicio_operacao: date | None) -> int:
@@ -139,9 +134,14 @@ def geracao_por_dia(usinas, inicio: date, fim: date) -> list[dict]:
     inicio_op = inicio_operacao_por_usina(usinas)
     esperado = list(GeracaoEsperada.objects.filter(usina__in=usinas).values_list('usina_id', 'mes', 'energia_kwh'))
 
+    por_mes: dict[int, list[tuple[date, float]]] = defaultdict(list)   # mês -> [(início da operação, kWh)]
+    for u, m, kwh in esperado:
+        if inicio_op.get(u):
+            por_mes[m].append((inicio_op[u], float(kwh)))
+
     def esperado_do_dia(d: date) -> float | None:
         """Soma das usinas que já operavam no dia (antes de ligar, a usina não tem esperado)."""
-        total = sum(float(kwh) for u, m, kwh in esperado if m == d.month and inicio_op.get(u) and inicio_op[u] <= d)
+        total = sum(kwh for inicio, kwh in por_mes.get(d.month, ()) if inicio <= d)
         return round(total / calendar.monthrange(d.year, d.month)[1], 3) if total else None
 
     dias = (fim - inicio).days + 1

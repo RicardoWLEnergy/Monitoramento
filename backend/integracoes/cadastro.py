@@ -84,10 +84,16 @@ def _modelo_valido(valor) -> str:
     return '' if valor in ('', '-', '--') else valor
 
 
-def data_criacao_foxess(texto: str | None) -> date | None:
+def _data_valida(dia: date | None) -> date | None:
+    """Só aceita datas entre 2000 e hoje (data da plataforma errada não pode parar a coleta)."""
+    from django.utils import timezone
+    return dia if dia and date(2000, 1, 1) <= dia <= timezone.localdate() else None
+
+
+def data_criacao_foxess(texto) -> date | None:
     """createDate da FoxESS: '2024-05-23 12:35:04 BRT-0300' -> 23/05/2024."""
     try:
-        return datetime.strptime((texto or '')[:10], '%Y-%m-%d').date()
+        return _data_valida(datetime.strptime(str(texto or '')[:10], '%Y-%m-%d').date())
     except ValueError:
         return None
 
@@ -98,7 +104,7 @@ def data_conexao_huawei(texto: str | None, fuso: str = 'America/Sao_Paulo') -> d
         momento = datetime.fromisoformat(str(texto or '').strip())
     except ValueError:
         return None
-    return momento.astimezone(ZoneInfo(fuso)).date() if momento.tzinfo else momento.date()
+    return _data_valida(momento.astimezone(ZoneInfo(fuso)).date() if momento.tzinfo else momento.date())
 
 
 def _cadastrar_foxess(sn: str, cliente: Usuario) -> ResultadoCadastro:

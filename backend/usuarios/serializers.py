@@ -1,4 +1,6 @@
 """Conversão de usuários de/para JSON, com as mesmas validações do modelo."""
+import re
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
@@ -86,7 +88,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         valor = (valor or '').strip()
         if not valor:
             return None
-        if not valor.isdigit():
+        if not re.fullmatch(r'[0-9]+', valor) or int(valor) == 0:
             raise serializers.ValidationError('O ID do cliente tem só números.')
         valor = str(int(valor))                   # "0123" e "123" são o mesmo cliente
         if self._ja_existe(id_cliente=valor):

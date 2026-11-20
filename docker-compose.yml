@@ -53,6 +53,7 @@ services:
       TLS_MODO: ${TLS_MODO}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro           # configuração (muda sem recompilar)
+      - ./manutencao:/manutencao:ro                   # modo manutenção: existe manutencao.ligada = em manutenção
       - caddy_dados:/data                             # certificados HTTPS
       - caddy_config:/config
     depends_on: [backend]

@@ -14,7 +14,8 @@ import { PLATAFORMAS, Pagina, Plataforma } from '../../services/usinas.service';
 import { NovoUsuario, ResultadoVinculo, UsuarioCadastro, UsuariosService } from '../../services/usuarios.service';
 import { UsuarioFormComponent } from '../usuarios/usuario-form.component';
 
-const POR_PAGINA = 20;
+/** Itens por página que a pessoa pode escolher (enviado à API em ?tamanho=). */
+const OPCOES_POR_PAGINA = [10, 20];
 
 interface Formulario extends Required<Omit<NovoUsuario, 'perfil'>> {
   plataforma: Plataforma;
@@ -50,18 +51,21 @@ export class ClientesComponent {
   private readonly recarregar = signal(0);
   readonly carregando = signal(true);
 
-  private readonly filtro = computed(() => ({ busca: this.busca().trim(), page: this.pagina(), _: this.recarregar() }));
+  readonly opcoesPorPagina = OPCOES_POR_PAGINA;
+  readonly porPagina = signal(OPCOES_POR_PAGINA[0]);
+
+  private readonly filtro = computed(() => ({ busca: this.busca().trim(), page: this.pagina(), tamanho: this.porPagina(), _: this.recarregar() }));
   readonly resultado = toSignal(
     toObservable(this.filtro).pipe(
       debounceTime(250),
       tap(() => this.carregando.set(true)),
-      switchMap(f => this.api.listar({ perfil: 'cliente', busca: f.busca, page: f.page }).pipe(
+      switchMap(f => this.api.listar({ perfil: 'cliente', busca: f.busca, page: f.page, tamanho: f.tamanho }).pipe(
         catchError(() => of<Pagina<UsuarioCadastro>>({ count: 0, next: null, previous: null, results: [] })))),
       tap(() => this.carregando.set(false)),
     ),
     { initialValue: null },
   );
-  readonly totalPaginas = computed(() => Math.max(1, Math.ceil((this.resultado()?.count ?? 0) / POR_PAGINA)));
+  readonly totalPaginas = computed(() => Math.max(1, Math.ceil((this.resultado()?.count ?? 0) / this.porPagina())));
 
   // ---------- Painel: novo cliente / vincular inversor / editar ----------
   readonly modo = signal<'novo' | 'vincular' | 'editar' | null>(null);
@@ -72,6 +76,12 @@ export class ClientesComponent {
   readonly sucesso = signal<{ texto: string; usina?: { id: number; nome: string } } | null>(null);
 
   definirBusca(v: string): void { this.busca.set(v); this.pagina.set(1); }
+  /** Itens por página (10 ou 20): volta para a 1ª página. */
+  mudarPorPagina(n: number): void {
+    this.porPagina.set(n);
+    this.pagina.set(1);
+  }
+
   irPara(p: number): void { this.pagina.set(Math.min(Math.max(1, p), this.totalPaginas())); }
 
   abrirNovo(): void {

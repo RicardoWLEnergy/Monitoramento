@@ -60,8 +60,17 @@ def _get(sessao, url: str, stream: bool = False, **params):
     except GoogleAuthError as erro:   # chave revogada/apagada, relógio errado, falha ao renovar o token
         raise GoogleErro(f'autenticação no Google recusada ({erro.__class__.__name__}): confira a chave da conta de serviço') from None
     if r.status_code != 200:
+        r.close()
         raise GoogleErro(f'Google HTTP {r.status_code}: {_mensagem(r)}')
     return r
+
+
+def _em_partes(resposta, tamanho: int = 64 * 1024):
+    """Entrega o arquivo aos poucos e sempre fecha a conexão com o Google (mesmo se o cliente desistir)."""
+    try:
+        yield from resposta.iter_content(tamanho)
+    finally:
+        resposta.close()
 
 
 def ler_aba(planilha_id: str, aba: str) -> list[list[str]]:
@@ -91,7 +100,7 @@ def baixar_arquivo(arquivo_id: str) -> Arquivo:
         nome, tipo = (nome if nome.lower().endswith('.pdf') else f'{nome}.pdf'), 'application/pdf'
     else:
         r = _get(sessao, base, stream=True, alt='media', supportsAllDrives='true')
-    return Arquivo(nome=nome, tipo=tipo, conteudo=r.iter_content(64 * 1024))
+    return Arquivo(nome=nome, tipo=tipo, conteudo=_em_partes(r))
 
 
 def _mensagem(resposta) -> str:

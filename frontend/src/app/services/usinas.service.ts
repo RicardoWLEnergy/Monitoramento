@@ -82,10 +82,15 @@ export interface Inversor {
 }
 
 export interface PontoCurva { hora: string; kw: number; }
-export interface Curva { data: string; fuso: string; pontos: PontoCurva[]; }
+/** Clima do dia na usina (Open-Meteo). */
+export type CondicaoClima = 'ensolarado' | 'nublado' | 'chuvoso';
+export interface ClimaDia { condicao: CondicaoClima; chuva_mm: number; }
+export const ROTULO_CLIMA: Record<CondicaoClima, string> = { ensolarado: 'Ensolarado', nublado: 'Nublado', chuvoso: 'Chuvoso' };
+
+export interface Curva { data: string; fuso: string; pontos: PontoCurva[]; clima?: ClimaDia | null; }
 
 /** Energia de um dia (null = sem dados) e o esperado do dia (esperado do mês ÷ dias do mês; null = não cadastrado). */
-export interface DiaGeracao { data: string; kwh: number | null; esperado_kwh: number | null; }
+export interface DiaGeracao { data: string; kwh: number | null; esperado_kwh: number | null; clima?: ClimaDia | null; }
 export interface GeracaoPeriodo { inicio: string; fim: string; dias: DiaGeracao[]; }
 
 export interface MesGeracao {
@@ -140,6 +145,8 @@ export interface FiltroUsinas {
   fabricante?: string | null;
   ordem?: string;
   page?: number;
+  /** Itens por página (padrão da API: 20). */
+  tamanho?: number;
 }
 
 /** Chamadas à API de usinas (/api/usinas/). */
