@@ -134,6 +134,15 @@ class TempoRealHuaweiTests(ColetaHuaweiBase):
         self.assertEqual(self.coletar_as(11, 0.0, 45056, comunicando=0), Status.OFFLINE)
         self.assertEqual(self.coletar_as(23, 0.0, 45056, comunicando=0), Status.NOITE)
 
+    def test_comunicando_sem_gerar_em_pleno_dia_e_falha_nao_offline(self):
+        # 3 = em espera verificando a rede · 769 = desligado por comando · 774 = chave CC desligada
+        for estado in (3, 769, 774):
+            self.assertEqual(self.coletar_as(11, 0.0, estado), Status.ALERTA)
+        self.assertEqual(self.coletar_as(7, 0.0, 3), Status.NOITE)    # começo da manhã: ainda é normal
+
+    def test_comunicacao_interrompida_informada_pela_huawei_e_offline(self):
+        self.assertEqual(self.coletar_as(11, 0.0, 45056), Status.OFFLINE)
+
     def test_falha_vira_alerta(self):
         self.api.tempo_real_dispositivos.return_value = self.tempo_real(0.0, 768)
         coleta_huawei.atualizar_tempo_real(api=self.api)

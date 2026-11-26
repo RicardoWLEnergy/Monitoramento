@@ -109,9 +109,14 @@ export class UsinasComponent {
   irPara(p: number): void { this.pagina.set(Math.min(Math.max(1, p), this.totalPaginas())); }
 
   // ---------- Auxiliares ----------
+  /** Gerado hoje × esperado de um dia (a barra vai enchendo ao longo do dia). */
   desempenho(u: UsinaLista): number | null {
-    // Gerado no mês × esperado até hoje (proporcional aos dias passados do mês)
-    return u.esperado_ate_hoje_kwh > 0 ? (u.geracao_mes_kwh / u.esperado_ate_hoje_kwh) * 100 : null;
+    return u.esperado_hoje_kwh > 0 ? (u.geracao_hoje_kwh / u.esperado_hoje_kwh) * 100 : null;
+  }
+
+  /** Só depois das 17h a barra baixa fica vermelha (de manhã ela ainda está naturalmente enchendo). */
+  fimDaTarde(): boolean {
+    return new Date().getHours() >= 17;
   }
 
   ultimaLeitura(iso: string | null): string {

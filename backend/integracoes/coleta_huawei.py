@@ -22,12 +22,17 @@ from usinas.models import Plataforma, Status, Usina
 from .cadastro import status_da_usina
 from .coleta import (
     Relatorio, _desde_a_primeira_geracao, _gravar_dias, desde_o_inicio, _meses_do_periodo, _numero, amostra_por_bloco,
-    arredondar_5min, e_noite, leitura_recente, limite_curvas, sem_comunicacao,
+    arredondar_5min, leitura_recente, limite_curvas, pouco_sol, sem_comunicacao,
 )
 from .huawei import HuaweiCliente, HuaweiErro, HuaweiLoginErro
 
+# inverter_state da Huawei (os mais comuns): 0–3 em espera (verificando isolamento, irradiância, rede) ·
+# 512 conectado · 513/514 conectado com limitação · 768 desligado por falha · 769 desligado por comando ·
+# 770 desligado por proteção da rede · 771 comunicação interrompida · 774 chave CC desligada ·
+# 40960 em espera sem irradiância · 45056 comunicação interrompida
 ESTADOS_ONLINE = {512, 513, 514}      # conectado à rede (inclusive com limitação)
 ESTADOS_FALHA = {768, 770}            # desligado por falha / por proteção da rede
+ESTADOS_SEM_COMUNICACAO = {771, 45056}   # o equipamento de comunicação perdeu o inversor: offline de verdade
 
 
 def cliente_huawei() -> HuaweiCliente:
@@ -37,18 +42,21 @@ def cliente_huawei() -> HuaweiCliente:
 ESTADO_SEM_SOL = 40960               # standby: sem irradiância
 
 
-def _status_inversor(dados: dict, noite: bool = False) -> str:
+def _status_inversor(dados: dict, pouco_sol: bool = False) -> str:
+    """Mesma regra da FoxESS (inversor comunicando): sem gerar em pleno dia é alerta, nunca offline."""
     try:
         estado = int(float(dados.get('inverter_state')))
     except (TypeError, ValueError):
         estado = None
+    if estado in ESTADOS_SEM_COMUNICACAO:
+        return Status.OFFLINE
     if estado in ESTADOS_FALHA:
         return Status.ALERTA                 # falha é alerta a qualquer hora
     if estado in ESTADOS_ONLINE or _numero(dados.get('active_power')) > 0:
         return Status.ONLINE
-    if estado == ESTADO_SEM_SOL or noite:
+    if estado == ESTADO_SEM_SOL or pouco_sol:
         return Status.NOITE                  # sem sol: normal, não é problema
-    return Status.OFFLINE                    # de dia e sem gerar: comunicação interrompida etc.
+    return Status.ALERTA                     # responde mas não gera em pleno dia (verificando a rede, chave CC...)
 
 
 def _por_tipo(inversores) -> dict[int, list]:
@@ -93,7 +101,7 @@ def atualizar_tempo_real(usinas=None, api: HuaweiCliente | None = None) -> Relat
                 if d is not None and _numero(d.get('run_state')) == 1:   # 1 = comunicando
                     inv.potencia_atual_kw = round(_numero(d.get('active_power')), 3)
                     inv.geracao_hoje_kwh = round(_numero(d.get('day_cap')), 3)
-                    inv.status = _status_inversor(d, e_noite(agora, usina.fuso_horario))
+                    inv.status = _status_inversor(d, pouco_sol(agora, usina.fuso_horario))
                     inv.ultima_leitura = agora
                 elif not leitura_recente(inv.ultima_leitura, usina, agora):
                     sem_comunicacao(inv, usina, agora)   # parou de comunicar há mais que o prazo

@@ -31,7 +31,8 @@ export interface UsinaLista {
   geracao_hoje_kwh: number;
   geracao_mes_kwh: number;
   esperado_mes_kwh: number;
-  esperado_ate_hoje_kwh: number;   // esperado do mês proporcional aos dias já passados
+  esperado_hoje_kwh: number;       // esperado de um dia (0 sem geração esperada ou antes de a usina ligar)
+  desempenho_mes_pct: number | null;   // gerado × esperado nos dias já fechados do mês em que a usina gerou
 }
 
 export interface ClienteVinculado { id: number; nome: string; email: string; }

@@ -1,5 +1,5 @@
 # Os 5 contêineres do Monitoramento. Configurações e senhas vêm do arquivo .env (fora do git).
-# Modelo do .env: .env.producao.example
+# Modelo do .env (na raiz do projeto): backend/.env.example, inclusive a parte "Só no servidor"
 services:
 
   # ---------- Banco de dados ----------

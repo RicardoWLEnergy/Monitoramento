@@ -23,17 +23,31 @@
   } @else {
     <!-- ---------- KPIs ---------- -->
     <section class="kpis">
+      @if (cardsVariaveis(); as cards) {
+        <!-- Outro dia ou período escolhido no gráfico -->
+        @for (c of cards; track c.rotulo) {
+          <div class="kpi">
+            <div class="kpi-topo"><span class="label">{{ c.rotulo }}</span><lucide-icon [img]="c.icone" [size]="16" [strokeWidth]="1.7" /></div>
+            <strong>{{ c.valor }}</strong>
+            <small>{{ c.detalhe }}</small>
+          </div>
+        }
+      } @else {
       <div class="kpi">
         <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
         <strong>{{ k.geracao_hoje_kwh | number: '1.0-0' }} kWh</strong>
-        <small>{{ k.potencia_atual_kw | number: '1.1-1' }} kW gerando agora</small>
+        <small>
+          {{ k.potencia_atual_kw | number: '1.1-1' }} kW agora
+          @if (hojePct() !== null) { · {{ hojePct() | number: '1.0-0' }}% do esperado }
+        </small>
       </div>
 
       <div class="kpi">
         <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
         <strong>{{ k.geracao_mes_kwh / 1000 | number: '1.2-2' }} MWh</strong>
         <small>
-          @if (k.desempenho_mes_pct !== null) { {{ k.desempenho_mes_pct | number: '1.0-0' }}% do esperado até hoje }
+          @if (k.desempenho_mes_pct !== null) { {{ k.desempenho_mes_pct | number: '1.0-0' }}% do esperado nos dias já fechados }
+          @else if (k.esperado_mes_kwh > 0) { desempenho a partir de amanhã }
           @else { sem geração esperada cadastrada }
         </small>
       </div>
@@ -55,6 +69,7 @@
           }
         </div>
       </div>
+      }
     </section>
 
     <!-- ---------- Linha 1: curva do dia + atenção ---------- -->
@@ -117,15 +132,6 @@
           @if (erroPeriodo()) {
             <div class="alerta erro">{{ erroPeriodo() }}</div>
           } @else if (r) {
-            <dl class="resumo-periodo">
-              <div><dt class="label">Total</dt><dd>{{ r.total / 1000 | number: '1.2-2' }} MWh</dd></div>
-              <div><dt class="label">Média por dia</dt><dd>{{ r.media | number: '1.0-0' }} kWh</dd></div>
-              @if (r.esperado !== null) {
-                <div><dt class="label">Esperado</dt><dd>{{ r.esperado / 1000 | number: '1.2-2' }} MWh</dd></div>
-                <div><dt class="label">Gerado × esperado</dt><dd>{{ r.desempenhoPct | number: '1.0-0' }}%</dd></div>
-              }
-              <div><dt class="label">Melhor dia</dt><dd>{{ r.melhorDia }} · {{ r.melhorKwh | number: '1.0-0' }} kWh</dd></div>
-            </dl>
             <div class="grafico" echarts [options]="opcoesPeriodo()" (chartClick)="abrirDia($any($event).dataIndex)"></div>
           } @else if (periodo()) {
             <div class="vazio">Sem geração registrada neste período.</div>
@@ -178,7 +184,7 @@
       <div class="card">
         <div class="card-topo">
           <h3>Menor desempenho no mês</h3>
-          <span class="sub">Gerado em relação ao esperado até hoje</span>
+          <span class="sub">Gerado × esperado nos dias já fechados</span>
         </div>
         @if (dados()!.menor_desempenho.length) {
           <ul class="lista">

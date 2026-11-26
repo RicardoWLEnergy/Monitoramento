@@ -36,23 +36,13 @@ ERROS = {
 }
 ERROS_DE_LIMITE = {40400, 40402, 40403}
 
-# Estado de operação do inversor (variável runningState)
-ESTADOS = {
-    160: 'autoteste', 161: 'aguardando', 162: 'verificando', 163: 'conectado à rede',
-    164: 'fora da rede', 165: 'falha', 166: 'falha permanente', 167: 'standby',
-    168: 'atualizando', 169: 'teste de fábrica', 170: 'estado ilegal',
-}
-
 # Variáveis de tempo real que usamos
 VARIAVEIS_TEMPO_REAL = [
     'generationPower',     # kW — potência CA entregue
-    'pvPower',             # kW — potência CC dos painéis
     'todayYield',          # kWh — energia do dia (a doc diz "kW", mas é kWh)
-    'generation',          # kWh — energia acumulada
-    'runningState',        # estado (ver ESTADOS)
-    'currentFault',        # códigos de falha atuais
-    'currentFaultCount',
-    'invTemperation',      # °C
+    'runningState',        # estado: 160 autoteste · 161 aguardando · 162 verificando · 163 conectado à rede ·
+                           # 164 fora da rede · 165 falha · 166 falha permanente · 167 standby · 168 atualizando ·
+                           # 169 teste de fábrica · 170 estado ilegal (como cada um vira status: coleta._status_inversor)
 ]
 
 
@@ -128,11 +118,6 @@ class FoxESSCliente:
                 return itens
             pagina += 1
 
-    # ---------- conta ----------
-    def cota(self) -> dict:
-        """Chamadas restantes no dia: {'total': ..., 'remaining': ...}."""
-        return self.chamar('GET', '/op/v0/user/getAccessCount')
-
     # ---------- usinas ----------
     def listar_usinas(self) -> list[dict]:
         """[{stationID, name, ianaTimezone}, ...]"""
@@ -166,10 +151,6 @@ class FoxESSCliente:
             'sn': sn, 'variables': variaveis or ['generationPower'],
             'begin': int(inicio.timestamp() * 1000), 'end': int(fim.timestamp() * 1000),
         })
-
-    def geracao(self, sn: str) -> dict:
-        """{'today', 'month', 'cumulative'} em kWh, no fuso da usina."""
-        return self.chamar('GET', '/op/v0/device/generation', params={'sn': sn})
 
     def relatorio_mensal(self, sn: str, ano: int, mes: int) -> list[dict]:
         """Energia de cada dia do mês (kWh)."""

@@ -37,17 +37,6 @@ TIPO_INVERSOR_STRING = 1
 TIPO_INVERSOR_RESIDENCIAL = 38
 TIPOS_INVERSOR = (TIPO_INVERSOR_STRING, TIPO_INVERSOR_RESIDENCIAL)
 
-# Estado do inversor (inverter_state) — os mais comuns
-ESTADOS = {
-    512: 'conectado à rede', 513: 'conectado (limitado)', 514: 'conectado (limitado)',
-    768: 'desligado: falha', 769: 'desligado: comando', 770: 'desligado: OVGR', 771: 'desligado: comunicação',
-    40960: 'standby: sem irradiância', 45056: 'comunicação interrompida',
-}
-
-# Saúde da usina (real_health_state)
-SAUDE = {1: 'desconectada', 2: 'com falha', 3: 'saudável'}
-
-
 class HuaweiErro(Exception):
     def __init__(self, endpoint: str, codigo: int | None, mensagem: str = ''):
         self.endpoint, self.codigo = endpoint, codigo
@@ -183,10 +172,3 @@ class HuaweiCliente:
             }) or []
         return resultado
 
-    def alarmes(self, codigos: list[str], inicio: datetime, fim: datetime) -> list[dict]:
-        resultado = []
-        for lote in em_lotes(codigos, 100):
-            resultado += self.chamar('getAlarmList', {
-                'stationCodes': ','.join(lote), 'beginTime': ms(inicio), 'endTime': ms(fim), 'language': 'pt_BR',
-            }) or []
-        return resultado

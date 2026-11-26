@@ -56,29 +56,44 @@
 
     <!-- ---------- KPIs ---------- -->
     <section class="kpis">
-      <div class="kpi">
-        <div class="kpi-topo"><span class="label">Potência agora</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
-        <strong>{{ u.potencia_atual_kw | number: '1.1-1' }} kW</strong>
-        <small>{{ resumo()!.usoPct | number: '1.0-0' }}% da potência instalada</small>
-      </div>
-      <div class="kpi">
-        <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
-        <strong>{{ u.geracao_hoje_kwh | number: '1.1-1' }} kWh</strong>
-        <small>{{ resumo()!.produtividade | number: '1.2-2' }} kWh/kWp</small>
-      </div>
-      <div class="kpi">
-        <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
-        <strong>{{ u.geracao_mes_kwh | number: '1.0-0' }} kWh</strong>
-        <small>
-          @if (resumo()!.desempenhoMes !== null) { {{ resumo()!.desempenhoMes | number: '1.0-0' }}% do esperado até hoje }
-          @else { sem geração esperada cadastrada }
-        </small>
-      </div>
-      <div class="kpi">
-        <div class="kpi-topo"><span class="label">Última leitura</span><lucide-icon [img]="icones.Clock" [size]="16" [strokeWidth]="1.7" /></div>
-        <strong>{{ dataHora(u.ultima_leitura) }}</strong>
-        <small>Pico do dia: {{ resumo()!.picoKw | number: '1.1-1' }} kW</small>
-      </div>
+      @if (cardsVariaveis(); as cards) {
+        <!-- Outro dia ou período escolhido no gráfico -->
+        @for (c of cards; track c.rotulo) {
+          <div class="kpi">
+            <div class="kpi-topo"><span class="label">{{ c.rotulo }}</span><lucide-icon [img]="c.icone" [size]="16" [strokeWidth]="1.7" /></div>
+            <strong>{{ c.valor }}</strong>
+            <small>{{ c.detalhe }}</small>
+          </div>
+        }
+      } @else {
+        <div class="kpi">
+          <div class="kpi-topo"><span class="label">Potência agora</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
+          <strong>{{ u.potencia_atual_kw | number: '1.1-1' }} kW</strong>
+          <small>{{ resumo()!.usoPct | number: '1.0-0' }}% da potência instalada</small>
+        </div>
+        <div class="kpi">
+          <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
+          <strong>{{ u.geracao_hoje_kwh | number: '1.1-1' }} kWh</strong>
+          <small>
+            @if (resumo()!.hojePct !== null) { {{ resumo()!.hojePct | number: '1.0-0' }}% do esperado do dia }
+            @else { sem geração esperada cadastrada }
+          </small>
+        </div>
+        <div class="kpi">
+          <div class="kpi-topo"><span class="label">Geração no mês</span><lucide-icon [img]="icones.CalendarDays" [size]="16" [strokeWidth]="1.7" /></div>
+          <strong>{{ u.geracao_mes_kwh | number: '1.0-0' }} kWh</strong>
+          <small>
+            @if (u.desempenho_mes_pct !== null) { {{ u.desempenho_mes_pct | number: '1.0-0' }}% do esperado nos dias já fechados }
+            @else if (u.esperado_mes_kwh > 0) { desempenho a partir de amanhã }
+            @else { sem geração esperada cadastrada }
+          </small>
+        </div>
+        <div class="kpi">
+          <div class="kpi-topo"><span class="label">Última leitura</span><lucide-icon [img]="icones.Clock" [size]="16" [strokeWidth]="1.7" /></div>
+          <strong>{{ dataHora(u.ultima_leitura) }}</strong>
+          <small>Pico do dia: {{ resumo()!.picoKw | number: '1.1-1' }} kW</small>
+        </div>
+      }
     </section>
 
     <!-- ---------- Curva do dia / geração do período ---------- -->
@@ -114,10 +129,10 @@
 
       @if (modo() === 'dia') {
         <div class="area-grafico">
-          @if (curva()?.clima; as cl) { @if (iconeClima[cl.condicao]) {
+          @if (curva()?.clima; as cl) { @if (iconeClima[cl.condicao] && dataCurva() === hoje) {
             <span class="clima" [class]="cl.condicao">
               <lucide-icon [img]="iconeClima[cl.condicao]" [size]="15" [strokeWidth]="2" />
-              {{ dataCurva() === hoje ? 'Hoje: ' : '' }}{{ textoClima(cl) }}
+              Hoje: {{ textoClima(cl) }}
             </span>
           } }
           @if (curva()?.pontos?.length) {
@@ -147,15 +162,6 @@
         @if (erroPeriodo()) {
           <div class="alerta erro">{{ erroPeriodo() }}</div>
         } @else if (r) {
-          <dl class="resumo-periodo">
-            <div><dt class="label">Total</dt><dd>{{ r.total | number: '1.0-0' }} kWh</dd></div>
-            <div><dt class="label">Média por dia</dt><dd>{{ r.media | number: '1.1-1' }} kWh</dd></div>
-            @if (r.esperado !== null) {
-              <div><dt class="label">Esperado</dt><dd>{{ r.esperado | number: '1.0-0' }} kWh</dd></div>
-              <div><dt class="label">Gerado × esperado</dt><dd>{{ r.desempenhoPct | number: '1.0-0' }}%</dd></div>
-            }
-            <div><dt class="label">Melhor dia</dt><dd>{{ r.melhorDia }} · {{ r.melhorKwh | number: '1.0-0' }} kWh</dd></div>
-          </dl>
           <div class="grafico" echarts [options]="opcoesPeriodo()" (chartClick)="abrirDia($any($event).dataIndex)"></div>
         } @else if (periodo()) {
           <div class="vazio">Sem geração registrada neste período.</div>

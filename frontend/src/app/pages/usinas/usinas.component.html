@@ -54,7 +54,7 @@
           <th class="ordenavel dir" (click)="ordenar('potencia_kwp')">Instalada<span class="seta">{{ seta('potencia_kwp') }}</span></th>
           <th class="ordenavel dir" (click)="ordenar('potencia_atual_kw')">Agora<span class="seta">{{ seta('potencia_atual_kw') }}</span></th>
           <th class="ordenavel dir" (click)="ordenar('geracao_hoje_kwh')">Hoje<span class="seta">{{ seta('geracao_hoje_kwh') }}</span></th>
-          <th class="dir">Mês vs. esperado</th>
+          <th class="dir">Hoje vs. esperado</th>
           <th class="ordenavel" (click)="ordenar('status')">Status<span class="seta">{{ seta('status') }}</span></th>
           <th class="dir">Ações</th>
         </tr>
@@ -70,11 +70,11 @@
             <td class="dir" data-rotulo="Instalada">{{ u.potencia_kwp | number: '1.2-2' }} kWp</td>
             <td class="dir" data-rotulo="Agora">{{ u.potencia_atual_kw | number: '1.1-1' }} kW</td>
             <td class="dir" data-rotulo="Hoje">{{ u.geracao_hoje_kwh | number: '1.1-1' }} kWh</td>
-            <td class="dir" data-rotulo="Mês vs. esperado">
+            <td class="dir" data-rotulo="Hoje vs. esperado">
               @let pct = desempenho(u);
               @if (pct !== null) {
                 <div class="desempenho">
-                  <span class="barra"><i [style.width.%]="pct > 100 ? 100 : pct" [class.baixo]="pct < 85"></i></span>
+                  <span class="barra"><i [style.width.%]="pct > 100 ? 100 : pct" [class.baixo]="pct < 85 && fimDaTarde()"></i></span>
                   {{ pct | number: '1.0-0' }}%
                 </div>
               } @else {

@@ -89,21 +89,36 @@ def _numero(valor) -> float:
 INICIO_NOITE, FIM_NOITE = 18, 6
 
 
+# Começo da manhã e fim da tarde: o inversor "aguardando sol" sem gerar ainda é normal
+MANHA_ATE, TARDE_DESDE = 8, 17
+
+
 def e_noite(momento: datetime, fuso: str) -> bool:
     hora = momento.astimezone(ZoneInfo(fuso)).hour
     return hora >= INICIO_NOITE or hora < FIM_NOITE
 
 
-def _status_inversor(estado, potencia: float, noite: bool = False) -> str:
+def pouco_sol(momento: datetime, fuso: str) -> bool:
+    """Noite, começo da manhã (até 8h) ou fim da tarde (a partir das 17h): ficar sem gerar é normal."""
+    hora = momento.astimezone(ZoneInfo(fuso)).hour
+    return hora < MANHA_ATE or hora >= TARDE_DESDE
+
+
+def _status_inversor(estado, potencia: float, pouco_sol: bool = False) -> str:
+    """
+    Status de um inversor QUE ESTÁ COMUNICANDO (offline é só quando não há comunicação: ver sem_comunicacao).
+    Falha → alerta a qualquer hora · gerando → online · sem gerar com pouco sol → "Sem sol" ·
+    sem gerar em pleno dia → alerta (o inversor responde mas não gera: aguardando, verificando a rede etc.).
+    """
     try:
         estado = int(estado)
     except (TypeError, ValueError):
         estado = None
     if estado in ESTADOS_FALHA:
-        return Status.ALERTA                 # falha é alerta a qualquer hora
+        return Status.ALERTA
     if estado in ESTADOS_ONLINE or potencia > 0:
         return Status.ONLINE
-    return Status.NOITE if noite else Status.OFFLINE   # inversor desligado sem sol não é problema
+    return Status.NOITE if pouco_sol else Status.ALERTA
 
 
 def _usinas_foxess(usinas=None):
@@ -119,11 +134,16 @@ def sem_comunicacao(inv: Inversor, usina: Usina, agora: datetime) -> None:
     Inversor sem leitura recente (mais velha que "considerar offline após"): não mantém a última
     potência congelada. Potência vai a zero; a energia de hoje só fica se a última leitura for de hoje.
     Status: "Sem sol" à noite (e no começo da manhã, enquanto o inversor ainda não acordou), senão offline.
+    Exceção: se estava em FALHA hoje, continua em falha até o fim do dia (ninguém confirmou que foi resolvida;
+    a falha é a informação mais importante). No dia seguinte, sem comunicação, passa a offline.
     """
     fuso = ZoneInfo(usina.fuso_horario)
     inv.potencia_atual_kw = 0
-    if not inv.ultima_leitura or inv.ultima_leitura.astimezone(fuso).date() != agora.astimezone(fuso).date():
+    leu_hoje = bool(inv.ultima_leitura) and inv.ultima_leitura.astimezone(fuso).date() == agora.astimezone(fuso).date()
+    if not leu_hoje:
         inv.geracao_hoje_kwh = 0
+    if inv.status == Status.ALERTA and leu_hoje:
+        return
     hora = agora.astimezone(fuso).hour
     acordando = FIM_NOITE <= hora < FIM_NOITE + 2 and inv.status == Status.NOITE
     inv.status = Status.NOITE if e_noite(agora, usina.fuso_horario) or acordando else Status.OFFLINE
@@ -170,7 +190,7 @@ def _tempo_real_da_usina(usina: Usina, dados: dict, agora: datetime, rel: Relato
             potencia = _numero(v.get('generationPower'))
             inv.potencia_atual_kw = round(potencia, 3)
             inv.geracao_hoje_kwh = round(_numero(v.get('todayYield')), 3)
-            inv.status = _status_inversor(v.get('runningState'), potencia, e_noite(momento, usina.fuso_horario))
+            inv.status = _status_inversor(v.get('runningState'), potencia, pouco_sol(momento, usina.fuso_horario))
             inv.ultima_leitura = momento
         else:
             sem_comunicacao(inv, usina, agora)

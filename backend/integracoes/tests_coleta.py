@@ -167,8 +167,37 @@ class TempoRealTests(ColetaBase):
         self.assertEqual(self.desligado_as(22), Status.NOITE)
         self.assertEqual(self.desligado_as(5), Status.NOITE)
 
-    def test_sem_geracao_de_dia_e_offline(self):
-        self.assertEqual(self.desligado_as(11), Status.OFFLINE)
+    def test_comunicando_sem_gerar_em_pleno_dia_e_falha_nao_offline(self):
+        self.assertEqual(self.desligado_as(11), Status.ALERTA)
+
+    def test_comunicando_sem_gerar_com_pouco_sol_e_sem_sol(self):
+        self.assertEqual(self.desligado_as(7), Status.NOITE)     # começo da manhã
+        self.assertEqual(self.desligado_as(17), Status.NOITE)    # fim da tarde
+
+    def test_aguardando_rede_em_pleno_dia_e_falha(self):
+        momento = datetime.combine(timezone.localdate(), datetime.min.time(), SP).replace(hour=12)
+        texto = momento.strftime('%Y-%m-%d %H:%M:%S BRT-0300')
+        self.api.tempo_real.return_value = [   # 161 = aguardando, 162 = verificando (tentando religar após a falha)
+            {'deviceSN': 'SN-A', 'time': texto, 'datas': [{'variable': 'generationPower', 'value': 0.0},
+                                                          {'variable': 'runningState', 'value': '161'}]},
+            {'deviceSN': 'SN-B', 'time': texto, 'datas': [{'variable': 'generationPower', 'value': 0.0},
+                                                          {'variable': 'runningState', 'value': '162'}]}]
+        with patch('integracoes.coleta.timezone.now', return_value=momento + timedelta(minutes=2)):
+            atualizar_tempo_real(api=self.api)
+        self.usina.refresh_from_db()
+        self.assertEqual(self.usina.status, Status.ALERTA)
+
+    def test_em_falha_e_perdeu_comunicacao_continua_falha_ate_o_fim_do_dia(self):
+        hoje = datetime.combine(timezone.localdate(), datetime.min.time(), SP)
+        Inversor.objects.update(status=Status.ALERTA, ultima_leitura=hoje.replace(hour=10))
+        self.api.tempo_real.return_value = []                     # ninguém responde
+        with patch('integracoes.coleta.timezone.now', return_value=hoje.replace(hour=13)):
+            atualizar_tempo_real(api=self.api)
+        self.assertEqual(set(Inversor.objects.values_list('status', flat=True)), {Status.ALERTA})
+        # no dia seguinte, ainda sem comunicação: aí sim offline
+        with patch('integracoes.coleta.timezone.now', return_value=hoje.replace(hour=13) + timedelta(days=1)):
+            atualizar_tempo_real(api=self.api)
+        self.assertEqual(set(Inversor.objects.values_list('status', flat=True)), {Status.OFFLINE})
 
     def test_falha_a_noite_continua_alerta(self):
         momento = datetime.combine(timezone.localdate(), datetime.min.time(), SP).replace(hour=22)
@@ -289,23 +318,6 @@ class DiasSemGeracaoTests(ColetaBase):
         self.api.historico.side_effect = historico
         importar_curvas(self.usina, hoje - timedelta(days=6), hoje, api=self.api)
         self.assertEqual({l.data_hora.astimezone(SP).date() for l in Leitura.objects.all()}, {hoje})
-
-    def test_comando_limpa_so_o_que_e_de_antes_de_ligar(self):
-        from io import StringIO
-        from django.core.management import call_command
-        hoje = timezone.localdate()
-        GeracaoDiaria.objects.create(usina=self.usina, data=hoje - timedelta(days=3), energia_kwh=0)
-        GeracaoDiaria.objects.create(usina=self.usina, data=hoje - timedelta(days=1), energia_kwh=12)  # ligou ontem
-        GeracaoDiaria.objects.create(usina=self.usina, data=hoje, energia_kwh=0)                       # parado: fica
-        antes = datetime.combine(hoje - timedelta(days=3), datetime.min.time(), SP).replace(hour=12)
-        Leitura.objects.create(usina=self.usina, data_hora=antes, potencia_kw=0)
-        saida = StringIO()
-        call_command('limpar_dias_sem_geracao', stdout=saida)                 # só mostra
-        self.assertEqual(GeracaoDiaria.objects.count(), 3)
-        self.assertIn('Seriam apagados: 1 dia(s) de energia e 1 leitura(s)', saida.getvalue())
-        call_command('limpar_dias_sem_geracao', '--aplicar', stdout=StringIO())
-        self.assertEqual(sorted(float(g.energia_kwh) for g in GeracaoDiaria.objects.all()), [0.0, 12.0])
-        self.assertFalse(Leitura.objects.exists())
 
 
 class PeriodoECoberturaTests(ColetaBase):

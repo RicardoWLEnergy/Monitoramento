@@ -34,15 +34,15 @@ class FoxESSAssinaturaTests(SimpleTestCase):
 
     def test_assina_so_o_path(self):
         with patch.object(self.cliente.sessao, 'request', return_value=resposta({'errno': 0, 'result': {}})) as req:
-            self.cliente.geracao('SN1')
+            self.cliente.detalhe_inversor('SN1')
         cab = req.call_args.kwargs['headers']
-        self.assertEqual(cab['signature'], self.cliente.assinatura('/op/v0/device/generation', cab['timestamp']))
+        self.assertEqual(cab['signature'], self.cliente.assinatura('/op/v1/device/detail', cab['timestamp']))
         self.assertEqual(req.call_args.kwargs['params'], {'sn': 'SN1'})
 
     def test_errno_diferente_de_zero_vira_erro(self):
         with patch.object(self.cliente.sessao, 'request', return_value=resposta({'errno': 40400, 'msg': 'x'})):
             with self.assertRaises(FoxESSErro) as ctx:
-                self.cliente.cota()
+                self.cliente.detalhe_usina('1')
         self.assertTrue(ctx.exception.e_limite)
 
     def test_tempo_real_divide_em_lotes_de_50(self):

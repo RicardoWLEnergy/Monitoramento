@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db.models import DateTimeField, F, FloatField, Func, Min, OuterRef, Subquery, Sum, Value
+from django.db.models import Count, DateTimeField, F, FloatField, Func, IntegerField, Min, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce, TruncMonth
 from django.utils import timezone
 
@@ -49,11 +49,31 @@ def inicio_operacao_por_usina(usinas) -> dict[int, date]:
     return {**primeira, **cadastrada}
 
 
-def esperado_ate_hoje(usina, hoje: date | None = None) -> float:
-    """Esperado do mês até hoje para uma usina vinda de anotar_usinas (desde o início da operação)."""
+def esperado_hoje(usina, hoje: date | None = None) -> float:
+    """Esperado de UM dia (esperado do mês ÷ dias do mês), se a usina já operava hoje; senão 0."""
     hoje = hoje or timezone.localdate()
     inicio = getattr(usina, 'inicio_operacao', None) or getattr(usina, 'primeira_geracao', None)
-    return esperado_proporcional(getattr(usina, 'esperado_mes_kwh', 0), _primeiro_dia(hoje), hoje, inicio)
+    return esperado_proporcional(getattr(usina, 'esperado_mes_kwh', 0), hoje, hoje, inicio)
+
+
+def desempenho_mes(usina, hoje: date | None = None) -> tuple[float, float] | None:
+    """
+    (gerado, esperado) do mês contando SÓ os dias já fechados (até ontem) em que a usina gerou.
+    Hoje fica de fora (ainda está pela metade) e dias antes de a usina ligar não pesam.
+    Ex.: ligou ontem → compara só ontem com o esperado de 1 dia. None sem dias fechados ou sem esperado.
+    """
+    hoje = hoje or timezone.localdate()
+    dias = getattr(usina, 'dias_com_geracao', 0) or 0
+    esperado_mes = float(getattr(usina, 'esperado_mes_kwh', 0) or 0)
+    if not dias or not esperado_mes:
+        return None
+    dias_mes = calendar.monthrange(hoje.year, hoje.month)[1]
+    return float(usina.gerado_dias_fechados_kwh or 0), esperado_mes * dias / dias_mes
+
+
+def desempenho_mes_pct(usina, hoje: date | None = None) -> float | None:
+    par = desempenho_mes(usina, hoje)
+    return round(par[0] / par[1] * 100, 1) if par else None
 
 
 MAX_DIAS_PERIODO = 366
@@ -90,21 +110,31 @@ def _soma(qs, campo: str):
     return Coalesce(Cast(Subquery(sub), FloatField()), Value(0.0))
 
 
+def _conta(qs):
+    """Subconsulta: quantas linhas de `qs` cada usina tem."""
+    sub = qs.filter(usina=OuterRef('pk')).values('usina').annotate(t=Count('data')).values('t')
+    return Coalesce(Subquery(sub, output_field=IntegerField()), Value(0))
+
+
 def anotar_usinas(usinas, hoje: date | None = None):
     """
     Acrescenta a cada usina: potência atual, geração de hoje, do mês, o esperado do mês e o 1º dia com geração
-    (reserva do início da operação). O esperado ATÉ HOJE sai de esperado_ate_hoje(usina): só os dias já operando.
+    (reserva do início da operação) e os dias já fechados do mês em que gerou (base de desempenho_mes).
     """
     hoje = hoje or timezone.localdate()
     esperado_mes = _soma(GeracaoEsperada.objects.filter(mes=hoje.month), 'energia_kwh')
     primeira_geracao = (GeracaoDiaria.objects.filter(usina=OuterRef('pk'), energia_kwh__gt=0)
                         .order_by('data').values('data')[:1])
+    # Dias do mês já fechados (até ontem) em que a usina gerou: base do desempenho do mês
+    fechados = GeracaoDiaria.objects.filter(data__gte=_primeiro_dia(hoje), data__lt=hoje, energia_kwh__gt=0)
     return usinas.annotate(
         potencia_atual_kw=_soma(Inversor.objects.all(), 'potencia_atual_kw'),
         geracao_hoje_kwh=_soma(Inversor.objects.all(), 'geracao_hoje_kwh'),
         geracao_mes_kwh=_soma(GeracaoDiaria.objects.filter(data__gte=_primeiro_dia(hoje), data__lte=hoje), 'energia_kwh'),
         esperado_mes_kwh=esperado_mes,
         primeira_geracao=Subquery(primeira_geracao),   # reserva, se a usina não tiver o início da operação
+        gerado_dias_fechados_kwh=_soma(fechados, 'energia_kwh'),
+        dias_com_geracao=_conta(fechados),
     )
 
 
@@ -199,14 +229,15 @@ def geracao_mensal(usinas, meses: int = 12, hoje: date | None = None) -> list[di
 def dashboard(usinas, hoje: date | None = None) -> dict:
     hoje = hoje or timezone.localdate()
     lista = list(anotar_usinas(usinas, hoje))
-    for u in lista:
-        u.esperado_ate_hoje_kwh = esperado_ate_hoje(u, hoje)
 
     def soma(campo):
         return round(sum(float(getattr(u, campo) or 0) for u in lista), 3)
 
     gerado_mes, esperado_mes = soma('geracao_mes_kwh'), soma('esperado_mes_kwh')
-    esperado_ate = soma('esperado_ate_hoje_kwh')
+    # Desempenho do mês: só os dias fechados em que cada usina gerou (e só usinas com esperado cadastrado)
+    pares = {u.pk: desempenho_mes(u, hoje) for u in lista}
+    validos = [p for p in pares.values() if p]
+    gerado_fechado, esperado_fechado = sum(p[0] for p in validos), sum(p[1] for p in validos)
     por_status = {s: sum(1 for u in lista if u.status == s) for s in Status.values}
 
     # Motivo de atenção: alerta aberto mais recente de cada usina
@@ -218,7 +249,7 @@ def dashboard(usinas, hoje: date | None = None) -> dict:
     atencao = sorted((u for u in lista if u.status not in (Status.ONLINE, Status.NOITE)),
                      key=lambda u: (u.status != Status.OFFLINE, u.nome))
     desempenho = sorted(
-        ((u, u.geracao_mes_kwh / u.esperado_ate_hoje_kwh * 100) for u in lista if u.esperado_ate_hoje_kwh),
+        ((u, pares[u.pk][0] / pares[u.pk][1] * 100) for u in lista if pares[u.pk]),
         key=lambda par: par[1],
     )[:5]
 
@@ -228,9 +259,9 @@ def dashboard(usinas, hoje: date | None = None) -> dict:
             'potencia_atual_kw': soma('potencia_atual_kw'),
             'geracao_mes_kwh': gerado_mes,
             'esperado_mes_kwh': esperado_mes,
-            'esperado_ate_hoje_kwh': esperado_ate,
-            # Gerado no mês × esperado ATÉ HOJE (não o mês inteiro)
-            'desempenho_mes_pct': round(gerado_mes / esperado_ate * 100, 1) if esperado_ate else None,
+            # Gerado × esperado nos dias já fechados do mês em que as usinas geraram (hoje fica de fora)
+            'desempenho_mes_pct': round(gerado_fechado / esperado_fechado * 100, 1) if esperado_fechado else None,
+            'esperado_hoje_kwh': round(sum(esperado_hoje(u, hoje) for u in lista), 3),
             'potencia_instalada_kwp': round(sum(float(u.potencia_kwp) for u in lista), 2),
             'total': len(lista),
             **por_status,

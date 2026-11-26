@@ -57,6 +57,8 @@
   .linha { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
-  .kpis { grid-template-columns: 1fr; }
+  .kpis { gap: 10px; }   /* continua em 2 colunas: os 4 cards cabem numa tela */
+  .status-resumo { gap: 4px 10px; }
+  .status-resumo b { font-size: 17px; }
   .grafico { height: 240px; }
 }

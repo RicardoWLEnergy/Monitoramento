@@ -1,19 +1,20 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { DecimalPipe, I18nPluralPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
 import {
   ChevronLeft, ChevronRight,
-  Activity, CalendarDays, Gauge, LucideAngularModule, TriangleAlert, WifiOff, Zap,
+  Activity, CalendarDays, Gauge, LucideAngularModule, TrendingUp, TriangleAlert, WifiOff, Zap,
 } from 'lucide-angular';
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { Dashboard, DashboardService } from '../../services/dashboard.service';
-import { GraficosService, echarts } from '../../services/graficos.service';
+import { GraficosService, echarts, numeroBR } from '../../services/graficos.service';
 import {
-  ESCALAS, Escala, agruparPorMes, deslocar, hojeIso, intervaloDa, resumoPeriodo,
+  ATUALIZAR_A_CADA_MS, CardKpi, ESCALAS, Escala, agruparPorMes, cardsDoPeriodo, dataBR, deslocar, energiaBR, hojeIso,
+  intervaloDa, pctBR, pctDoEsperado, picoDaCurva, resumoPeriodo,
 } from '../../services/periodo';
-import { GeracaoPeriodo, PontoCurva } from '../../services/usinas.service';
+import { DiaGeracao, GeracaoPeriodo, PontoCurva } from '../../services/usinas.service';
 
 /** Visão geral: dashboard das usinas visíveis ao usuário — o que importa saber de relance. */
 @Component({
@@ -42,6 +43,9 @@ export class VisaoGeralComponent {
   readonly hojeIso = hojeIso();
   readonly dataCurva = signal(this.hojeIso);
   readonly curva = signal<PontoCurva[] | null>(null);   // null = a de hoje, que vem no painel
+  /** Energia e esperado do dia escolhido no modo Dia (só quando não é hoje), somando as usinas. */
+  readonly dadosDia = signal<DiaGeracao | null>(null);
+  private ultimaAtualizacao = 0;
   // Período: semana / mês / ano com ‹ › (padrão: o mês atual) ou intervalo personalizado
   readonly escalas = ESCALAS;
   readonly escala = signal<Escala>('mes');
@@ -59,6 +63,28 @@ export class VisaoGeralComponent {
   readonly periodo = signal<GeracaoPeriodo | null>(null);
   readonly erroPeriodo = signal<string | null>(null);
   readonly resumoPeriodo = computed(() => resumoPeriodo(this.periodo()?.dias ?? []));
+  /** Geração de hoje × esperado de hoje (somando as usinas). */
+  readonly hojePct = computed(() => pctDoEsperado(this.kpis()?.geracao_hoje_kwh, this.kpis()?.esperado_hoje_kwh));
+
+  /** Cards de outro dia ou do período escolhido no gráfico (null = cards de hoje). */
+  readonly cardsVariaveis = computed<CardKpi[] | null>(() => {
+    if (this.modo() === 'periodo') {
+      return cardsDoPeriodo(this.resumoPeriodo(), !this.periodo() && !this.erroPeriodo(),
+        { total: CalendarDays, media: Zap, esperado: Activity, melhor: TrendingUp });
+    }
+    if (this.dataCurva() === this.hojeIso) return null;
+    const d = this.dadosDia();
+    const pico = picoDaCurva(this.curva() ?? []);
+    const k = this.kpis();
+    return [
+      { rotulo: 'Geração do dia', valor: d?.kwh != null ? energiaBR(d.kwh) : '—', detalhe: dataBR(this.dataCurva()), icone: CalendarDays },
+      { rotulo: 'Pico do dia', valor: pico ? `${numeroBR(pico.kw, 1)} kW` : '—', detalhe: pico ? `às ${pico.hora}` : 'sem leituras', icone: TrendingUp },
+      { rotulo: 'Gerado × esperado', valor: pctBR(pctDoEsperado(d?.kwh, d?.esperado_kwh)),
+        detalhe: d?.esperado_kwh ? `esperado: ${energiaBR(d.esperado_kwh)}` : 'sem geração esperada cadastrada', icone: Activity },
+      { rotulo: 'Potência instalada', valor: `${numeroBR(k?.potencia_instalada_kwp ?? 0, 2)} kWp`,
+        detalhe: `${k?.total ?? 0} ${k?.total === 1 ? 'usina monitorada' : 'usinas monitoradas'}`, icone: Gauge },
+    ];
+  });
 
   readonly pontosCurva = computed(() => this.curva() ?? this.dados()?.curva_hoje ?? []);
   readonly opcoesCurva = computed(() => this.graficos.curvaPotencia(this.pontosCurva()));
@@ -70,9 +96,21 @@ export class VisaoGeralComponent {
 
   constructor() {
     this.carregar();
+    // Atualiza sozinha a cada 5 min (o ritmo da coleta); confere a cada minuto, só com a aba visível
+    const relogio = setInterval(() => this.atualizarSeVencido(), 60_000);
+    inject(DestroyRef).onDestroy(() => clearInterval(relogio));
+  }
+
+  /** Atualização silenciosa: sem "Carregando..." e, se falhar, mantém o que está na tela. */
+  private atualizarSeVencido(): void {
+    if (document.hidden || !this.dados() || Date.now() - this.ultimaAtualizacao < ATUALIZAR_A_CADA_MS) return;
+    this.ultimaAtualizacao = Date.now();
+    this.api.carregar().subscribe({ next: d => this.dados.set(d), error: () => undefined });
+    if (this.modo() === 'periodo' && this.fimAteHoje() === this.hojeIso) this.carregarPeriodo();
   }
 
   carregar(): void {
+    this.ultimaAtualizacao = Date.now();
     this.carregando.set(true);
     this.erro.set(null);
     this.api.carregar().subscribe({
@@ -89,8 +127,13 @@ export class VisaoGeralComponent {
   mudarDia(data: string): void {
     if (!data) return;
     this.dataCurva.set(data);
+    this.dadosDia.set(null);
     if (data === this.hojeIso) { this.curva.set(null); return; }
     this.api.curva(data).subscribe({ next: c => this.curva.set(c.pontos), error: () => this.curva.set([]) });
+    this.api.geracaoDiaria(data, data).subscribe({
+      next: p => this.dadosDia.set(p.dias[0] ?? null),
+      error: () => this.dadosDia.set(null),
+    });
   }
 
   mudarPeriodo(inicio: string, fim: string): void {

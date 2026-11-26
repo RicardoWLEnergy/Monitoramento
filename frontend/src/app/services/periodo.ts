@@ -1,4 +1,6 @@
-import { DiaGeracao, MesGeracao } from './usinas.service';
+import type { LucideIconData } from 'lucide-angular';
+
+import { DiaGeracao, MesGeracao, PontoCurva } from './usinas.service';
 
 /** Data no formato AAAA-MM-DD no fuso local. */
 export const isoLocal = (d: Date) => d.toLocaleDateString('sv-SE');
@@ -78,9 +80,9 @@ export function agruparPorMes(dias: DiaGeracao[], ano: number, hoje: string): Me
 }
 
 export interface ResumoPeriodo {
-  total: number; media: number; melhorDia: string; melhorKwh: number;
+  total: number; media: number; dias: number; melhorDia: string; melhorKwh: number;
   esperado: number | null;      // soma do esperado dos dias com dados (null sem geração esperada cadastrada)
-  desempenhoPct: number | null; // gerado × esperado, nos mesmos dias
+  desempenhoPct: number | null; // gerado × esperado, nos mesmos dias (os que têm dados E esperado)
 }
 
 /**
@@ -92,9 +94,51 @@ export function resumoPeriodo(dias: DiaGeracao[]): ResumoPeriodo | null {
   if (!comDados.length) return null;
   const total = comDados.reduce((t, d) => t + d.kwh, 0);
   const melhor = comDados.reduce((m, d) => (d.kwh > m.kwh ? d : m));
-  const esperado = comDados.reduce((t, d) => t + (d.esperado_kwh ?? 0), 0) || null;
+  const comEsperado = comDados.filter(d => d.esperado_kwh);
+  const esperado = comEsperado.reduce((t, d) => t + (d.esperado_kwh ?? 0), 0) || null;
+  const geradoComEsperado = comEsperado.reduce((t, d) => t + d.kwh, 0);
   return {
-    total, media: total / comDados.length, melhorDia: diaMesBR(melhor.data), melhorKwh: melhor.kwh,
-    esperado, desempenhoPct: esperado ? (total / esperado) * 100 : null,
+    total, media: total / comDados.length, dias: comDados.length, melhorDia: diaMesBR(melhor.data), melhorKwh: melhor.kwh,
+    esperado, desempenhoPct: esperado ? (geradoComEsperado / esperado) * 100 : null,
   };
 }
+
+// ---------------------------------------------------------------------
+// Cards de indicadores (os quatro do topo) quando não é o "hoje"
+// ---------------------------------------------------------------------
+const br = (v: number, casas = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+/** Energia legível: até 10.000 kWh em kWh; acima disso, em MWh. */
+export const energiaBR = (kwh: number) =>
+  kwh >= 10_000 ? `${br(kwh / 1000, 2)} MWh` : `${br(kwh, kwh < 100 ? 1 : 0)} kWh`;
+export const pctBR = (pct: number | null) => (pct === null ? '—' : `${br(pct)}%`);
+
+export interface CardKpi { rotulo: string; valor: string; detalhe: string; icone: LucideIconData; }
+
+/** Gerado ÷ esperado × 100 (null sem esperado). */
+export const pctDoEsperado = (kwh: number | null | undefined, esperado: number | null | undefined) =>
+  esperado ? ((kwh ?? 0) / esperado) * 100 : null;
+
+/** Maior potência da curva do dia e o horário. */
+export function picoDaCurva(pontos: PontoCurva[]): PontoCurva | null {
+  return pontos.length ? pontos.reduce((m, p) => (p.kw > m.kw ? p : m)) : null;
+}
+
+/** Os quatro cards do período: total, média por dia, gerado × esperado e melhor dia. */
+export function cardsDoPeriodo(
+  r: ResumoPeriodo | null, carregando: boolean,
+  ic: { total: LucideIconData; media: LucideIconData; esperado: LucideIconData; melhor: LucideIconData },
+): CardKpi[] {
+  const vazio = carregando ? 'Carregando...' : 'sem geração neste período';
+  return [
+    { rotulo: 'Total no período', valor: r ? energiaBR(r.total) : '—',
+      detalhe: r ? `${r.dias} ${r.dias === 1 ? 'dia' : 'dias'} com geração` : vazio, icone: ic.total },
+    { rotulo: 'Média por dia', valor: r ? energiaBR(r.media) : '—', detalhe: r ? 'nos dias com geração' : vazio, icone: ic.media },
+    { rotulo: 'Gerado × esperado', valor: pctBR(r?.desempenhoPct ?? null),
+      detalhe: !r ? vazio : r.esperado === null ? 'sem geração esperada cadastrada' : `esperado: ${energiaBR(r.esperado)}`,
+      icone: ic.esperado },
+    { rotulo: 'Melhor dia', valor: r ? energiaBR(r.melhorKwh) : '—', detalhe: r ? r.melhorDia : vazio, icone: ic.melhor },
+  ];
+}
+
+/** De quanto em quanto tempo as telas de acompanhamento se atualizam sozinhas (o ritmo da coleta). */
+export const ATUALIZAR_A_CADA_MS = 5 * 60_000;

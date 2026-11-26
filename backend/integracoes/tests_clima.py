@@ -1,5 +1,5 @@
 """Testes do clima do dia (Open-Meteo simulada no formato real; nenhuma chamada de verdade)."""
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase

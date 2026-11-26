@@ -40,11 +40,11 @@ class DashboardEAlertasApiTests(APITestCase):
         self.assertEqual(d['kpis']['potencia_instalada_kwp'], 60.0)
         self.assertEqual(d['atencao'][0]['nome'], 'Alheia')   # offline vem primeiro
         self.assertEqual([a['motivo'] for a in d['atencao']], ['Sem comunicação', 'Inversor 2 abaixo'])
-        # 40 kWh gerados × esperado ATÉ HOJE (80 kWh do mês proporcional aos dias passados)
+        # Só há geração HOJE neste mês: o dia ainda não fechou, então ainda não há desempenho do mês
         hoje = timezone.localdate()
-        pct = round(40 / (80 * hoje.day / calendar.monthrange(hoje.year, hoje.month)[1]) * 100, 1)
-        self.assertEqual(d['menor_desempenho'], [{'id': self.minha.pk, 'nome': 'Minha', 'pct': pct}])
-        self.assertEqual(d['kpis']['desempenho_mes_pct'], pct)
+        self.assertEqual(d['menor_desempenho'], [])
+        self.assertIsNone(d['kpis']['desempenho_mes_pct'])
+        self.assertEqual(d['kpis']['esperado_hoje_kwh'], round(80 / calendar.monthrange(hoje.year, hoje.month)[1], 3))
         self.assertEqual(d['kpis']['esperado_mes_kwh'], 80.0)
         self.assertEqual(len(d['geracao_mensal']), 12)
 
@@ -126,3 +126,53 @@ class DashboardEAlertasApiTests(APITestCase):
         d = self.client.get('/api/dashboard/').data
         self.assertEqual([a['nome'] for a in d['atencao']], ['Minha'])
         self.assertEqual(d['kpis']['noite'], 1)
+
+
+class DesempenhoDoMesTests(APITestCase):
+    """Desempenho do mês: só os dias já fechados em que a usina gerou; hoje e os dias sem geração ficam de fora."""
+
+    def setUp(self):
+        from datetime import date
+        self.hoje = date(2026, 11, 20)   # novembro: 30 dias
+        comum = {'plataforma': Plataforma.FOXESS, 'fabricante': Fabricante.WEG}
+        self.usina = Usina.objects.create(**comum, id_externo='A', nome='Nova', potencia_kwp=10,
+                                          inicio_operacao=date(2026, 11, 19))
+        GeracaoEsperada.objects.create(usina=self.usina, mes=11, energia_kwh=900)   # 30 kWh por dia
+        GeracaoDiaria.objects.create(usina=self.usina, data=date(2026, 11, 19), energia_kwh=33)   # ontem
+        GeracaoDiaria.objects.create(usina=self.usina, data=self.hoje, energia_kwh=5)             # hoje, pela metade
+
+    def anotada(self):
+        from .consultas import anotar_usinas
+        return anotar_usinas(Usina.objects.all(), self.hoje).get()
+
+    def test_usina_que_ligou_ontem_compara_so_ontem(self):
+        from .consultas import desempenho_mes, desempenho_mes_pct
+        u = self.anotada()
+        self.assertEqual(desempenho_mes(u, self.hoje), (33.0, 30.0))
+        self.assertEqual(desempenho_mes_pct(u, self.hoje), 110.0)
+
+    def test_dia_sem_geracao_nao_conta(self):
+        from datetime import date
+        from .consultas import desempenho_mes
+        GeracaoDiaria.objects.create(usina=self.usina, data=date(2026, 11, 18), energia_kwh=0)
+        self.assertEqual(desempenho_mes(self.anotada(), self.hoje), (33.0, 30.0))
+
+    def test_ligou_hoje_ainda_nao_tem_desempenho(self):
+        from datetime import date
+        from .consultas import desempenho_mes_pct
+        GeracaoDiaria.objects.filter(data=date(2026, 11, 19)).delete()
+        self.assertIsNone(desempenho_mes_pct(self.anotada(), self.hoje))
+
+    def test_esperado_de_hoje_e_um_dia_e_zero_antes_de_ligar(self):
+        from datetime import date
+        from .consultas import esperado_hoje
+        self.assertEqual(esperado_hoje(self.anotada(), self.hoje), 30.0)
+        Usina.objects.filter(pk=self.usina.pk).update(inicio_operacao=date(2026, 11, 21))
+        self.assertEqual(esperado_hoje(self.anotada(), self.hoje), 0.0)
+
+    def test_dashboard_usa_os_dias_fechados(self):
+        from .consultas import dashboard
+        d = dashboard(Usina.objects.all(), self.hoje)
+        self.assertEqual(d['kpis']['desempenho_mes_pct'], 110.0)
+        self.assertEqual(d['menor_desempenho'], [{'id': self.usina.pk, 'nome': 'Nova', 'pct': 110.0}])
+        self.assertEqual(d['kpis']['esperado_hoje_kwh'], 30.0)

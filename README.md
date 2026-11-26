@@ -150,8 +150,6 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 | `coletar` | coleta automática: tempo real a cada 5 min + rotina diária (energia dos últimos dias, curva de ontem, partições) + importações de histórico pedidas na tela |
 | `coletar --uma-vez` | um ciclo completo e sai (bom para testar) |
 | `atualizar_clima [--dias 90]` | preenche o clima do dia (ensolarado/nublado/chuvoso, Open-Meteo) dos dias passados; o coletor já atualiza ontem e hoje a cada 3 h |
-| `preencher_inicio_operacao [--aplicar]` | busca na plataforma a data de criação/conexão das usinas sem "início da operação" (sem `--aplicar`, só mostra; Huawei faz 1 login) |
-| `limpar_dias_sem_geracao [--aplicar]` | apaga energia/leituras zeradas de antes de cada usina começar a operar (sem `--aplicar`, só mostra) |
 | `particoes_leitura` | cria as partições dos próximos meses e remove as antigas (o coletor já faz isso todo dia) |
 | `test` | roda os testes automáticos (nenhum acessa as APIs reais) |
 
@@ -245,7 +243,7 @@ Servidor (só dentro dele) ── 127.0.0.1:8001 → backend  (painel /admin, po
 | `Caddyfile` | HTTPS automático, cabeçalhos de segurança e encaminhamento `/api`, `/static` → Django |
 | `backend/Dockerfile` | imagem do Django (usada pela API e pelo coletor) |
 | `frontend/Dockerfile` | compila o Angular e entrega pelo Caddy |
-| `.env.producao.example` | modelo das configurações; no servidor vira `.env` (fora do git) |
+| `backend/.env.example` | modelo das configurações; no servidor vira `.env` na raiz do projeto (fora do git) |
 
 Só o Caddy fica aberto para a internet (portas 80/443). O banco não tem porta publicada.
 O painel `/admin` do Django **não** fica na internet: só pelo próprio servidor (ver "Painel /admin").
@@ -255,8 +253,8 @@ O painel `/admin` do Django **não** fica na internet: só pelo próprio servido
 2. Docker + plugin Compose (repositório oficial do Docker ou `docker.io` + `docker-compose-v2` do Ubuntu).
 3. Deploy Key: `ssh-keygen` no servidor → GitHub → *Settings → Deploy keys* (sem escrita) →
    `git clone git@github.com:RicardoWLEnergy/Monitoramento.git ~/monitoramento`.
-4. `cp .env.producao.example .env` e preencher (chave e senha geradas com `openssl rand -hex 50` / `-hex 24`;
-   a senha do banco deve ter só letras e números).
+4. `cp backend/.env.example .env` e preencher, inclusive a parte "Só no servidor" do fim do arquivo (chave e senha
+   geradas com `openssl rand -hex 50` / `-hex 24`; a senha do banco deve ter só letras e números).
 5. Subir:
    ```bash
    docker compose up -d --build

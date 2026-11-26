@@ -14,20 +14,26 @@ class UsinaListaSerializer(serializers.ModelSerializer):
     geracao_hoje_kwh = serializers.FloatField(read_only=True)
     geracao_mes_kwh = serializers.FloatField(read_only=True)
     esperado_mes_kwh = serializers.FloatField(read_only=True)
-    # Esperado do mês até hoje, contando só os dias em que a usina já operava
-    esperado_ate_hoje_kwh = serializers.SerializerMethodField()
+    # Esperado de um dia (base da barra "Hoje vs. esperado") e desempenho do mês nos dias fechados em que gerou
+    esperado_hoje_kwh = serializers.SerializerMethodField()
+    desempenho_mes_pct = serializers.SerializerMethodField()
 
     class Meta:
         model = Usina
         fields = [
             'id', 'nome', 'plataforma', 'plataforma_nome', 'fabricante', 'fabricante_nome',
             'cidade', 'uf', 'potencia_kwp', 'status', 'ultima_leitura',
-            'potencia_atual_kw', 'geracao_hoje_kwh', 'geracao_mes_kwh', 'esperado_mes_kwh', 'esperado_ate_hoje_kwh',
+            'potencia_atual_kw', 'geracao_hoje_kwh', 'geracao_mes_kwh', 'esperado_mes_kwh',
+            'esperado_hoje_kwh', 'desempenho_mes_pct',
         ]
 
-    def get_esperado_ate_hoje_kwh(self, obj) -> float:
-        from monitoramento.consultas import esperado_ate_hoje
-        return round(esperado_ate_hoje(obj), 3)
+    def get_esperado_hoje_kwh(self, obj) -> float:
+        from monitoramento.consultas import esperado_hoje
+        return round(esperado_hoje(obj), 3)
+
+    def get_desempenho_mes_pct(self, obj) -> float | None:
+        from monitoramento.consultas import desempenho_mes_pct
+        return desempenho_mes_pct(obj)
 
 
 class UsinaDetalheSerializer(UsinaListaSerializer):

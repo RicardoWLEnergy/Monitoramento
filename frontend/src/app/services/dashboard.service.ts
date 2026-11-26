@@ -9,8 +9,8 @@ export interface Dashboard {
     potencia_atual_kw: number;
     geracao_mes_kwh: number;
     esperado_mes_kwh: number;
-    esperado_ate_hoje_kwh: number;
-    desempenho_mes_pct: number | null;   // gerado × esperado até hoje; null sem geração esperada cadastrada
+    desempenho_mes_pct: number | null;   // gerado × esperado nos dias já fechados do mês (hoje fica de fora)
+    esperado_hoje_kwh: number;           // esperado de um dia, somando as usinas
     potencia_instalada_kwp: number;
     total: number;
     online: number;

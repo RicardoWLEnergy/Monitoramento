@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { DecimalPipe, I18nPluralPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
@@ -7,16 +7,18 @@ import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
 import {
   ChevronLeft, ChevronRight,
   ArrowLeft, CalendarDays, ChartLine, Clock, Cloud, CloudRain, Cpu, ExternalLink, Gauge, LucideAngularModule, MapPin,
-  Settings, Sun, Zap,
+  Settings, Sun, TrendingUp, Zap,
 } from 'lucide-angular';
 
 import { AuthService, mensagemDeErro } from '../../services/auth.service';
-import { GraficosService, echarts, textoClima } from '../../services/graficos.service';
+import { GraficosService, echarts, numeroBR, textoClima } from '../../services/graficos.service';
 import {
-  ESCALAS, Escala, agruparPorMes, deslocar, hojeIso, intervaloDa, resumoPeriodo,
+  ATUALIZAR_A_CADA_MS, CardKpi, ESCALAS, Escala, agruparPorMes, cardsDoPeriodo, dataBR, deslocar, energiaBR, hojeIso,
+  intervaloDa, pctBR, pctDoEsperado, picoDaCurva, resumoPeriodo,
 } from '../../services/periodo';
 import {
-  CLASSE_STATUS, Curva, GeracaoPeriodo, Inversor, MesGeracao, ROTULO_STATUS, UsinaDetalhe, UsinasService,
+  CLASSE_STATUS, Curva, DiaGeracao, GeracaoPeriodo, Inversor, MesGeracao, ROTULO_CLIMA, ROTULO_STATUS, UsinaDetalhe,
+  UsinasService,
 } from '../../services/usinas.service';
 import { UsinaConfigComponent } from './usina-config.component';
 
@@ -57,6 +59,8 @@ export class UsinaDetalheComponent {
   readonly curva = signal<Curva | null>(null);
   readonly dataCurva = signal(hojeIso());
   readonly hoje = hojeIso();
+  /** Energia e esperado do dia escolhido no modo Dia (só quando não é hoje). */
+  readonly dadosDia = signal<DiaGeracao | null>(null);
 
   // Gráfico de cima: "Dia" (curva de potência) ou "Período" (energia de cada dia)
   readonly modo = signal<Modo>('dia');
@@ -82,18 +86,38 @@ export class UsinaDetalheComponent {
   readonly historicoComoTabela = signal(false);
 
   private id = 0;
+  private ultimaAtualizacao = 0;
 
+  /** Cards de hoje (modo Dia no dia atual). */
   readonly resumo = computed(() => {
     const u = this.usina();
     if (!u) return null;
-    const pontos = this.curva()?.pontos ?? [];
     return {
       usoPct: u.potencia_kwp ? (u.potencia_atual_kw / u.potencia_kwp) * 100 : 0,
-      produtividade: u.potencia_kwp ? u.geracao_hoje_kwh / u.potencia_kwp : 0,
-      // Gerado no mês × esperado ATÉ HOJE (proporcional aos dias passados), não o mês inteiro
-      desempenhoMes: u.esperado_ate_hoje_kwh ? (u.geracao_mes_kwh / u.esperado_ate_hoje_kwh) * 100 : null,
-      picoKw: Math.max(0, ...pontos.map(p => p.kw)),
+      hojePct: pctDoEsperado(u.geracao_hoje_kwh, u.esperado_hoje_kwh),
+      picoKw: picoDaCurva(this.curva()?.pontos ?? [])?.kw ?? 0,
     };
+  });
+
+  /** Cards de outro dia ou do período escolhido no gráfico (null = cards de hoje). */
+  readonly cardsVariaveis = computed<CardKpi[] | null>(() => {
+    if (this.modo() === 'periodo') {
+      return cardsDoPeriodo(this.resumoPeriodo(), !this.periodo() && !this.erroPeriodo(),
+        { total: CalendarDays, media: ChartLine, esperado: Gauge, melhor: TrendingUp });
+    }
+    if (this.dataCurva() === this.hoje) return null;
+    const d = this.dadosDia();
+    const pico = picoDaCurva(this.curva()?.pontos ?? []);
+    const cl = this.curva()?.clima;
+    return [
+      { rotulo: 'Geração do dia', valor: d?.kwh != null ? energiaBR(d.kwh) : '—', detalhe: dataBR(this.dataCurva()), icone: CalendarDays },
+      { rotulo: 'Pico do dia', valor: pico ? `${numeroBR(pico.kw, 1)} kW` : '—', detalhe: pico ? `às ${pico.hora}` : 'sem leituras', icone: TrendingUp },
+      { rotulo: 'Gerado × esperado', valor: pctBR(pctDoEsperado(d?.kwh, d?.esperado_kwh)),
+        detalhe: d?.esperado_kwh ? `esperado: ${energiaBR(d.esperado_kwh)}` : 'sem geração esperada cadastrada', icone: Gauge },
+      { rotulo: 'Clima do dia', valor: (cl && ROTULO_CLIMA[cl.condicao]) || '—',
+        detalhe: !cl ? 'sem dado de clima' : cl.chuva_mm >= 1 ? `${numeroBR(cl.chuva_mm)} mm de chuva` : 'sem chuva',
+        icone: (cl && this.iconeClima[cl.condicao]) || Cloud },
+    ];
   });
   readonly temEsperado = computed(() => this.historico().some(m => m.esperado_kwh > 0));
 
@@ -111,9 +135,26 @@ export class UsinaDetalheComponent {
       this.id = Number(p.get('id'));
       this.carregar();
     });
+    // Atualiza sozinha a cada 5 min (o ritmo da coleta); confere a cada minuto, só com a aba visível
+    const relogio = setInterval(() => this.atualizarSeVencido(), 60_000);
+    inject(DestroyRef).onDestroy(() => clearInterval(relogio));
+  }
+
+  /** Atualização silenciosa: sem "Carregando..." e, se falhar, mantém o que está na tela. */
+  private atualizarSeVencido(): void {
+    if (document.hidden || !this.usina() || this.aba() !== 'geracao'
+        || Date.now() - this.ultimaAtualizacao < ATUALIZAR_A_CADA_MS) return;
+    this.ultimaAtualizacao = Date.now();
+    forkJoin({ usina: this.api.detalhe(this.id), inversores: this.api.inversores(this.id) }).subscribe({
+      next: r => { this.usina.set(r.usina); this.inversores.set(r.inversores); },
+      error: () => undefined,
+    });
+    if (this.dataCurva() === this.hoje) this.carregarCurva();
+    if (this.modo() === 'periodo' && this.fimAteHoje() === this.hoje) this.carregarPeriodo();
   }
 
   carregar(): void {
+    this.ultimaAtualizacao = Date.now();
     this.carregando.set(true);
     this.erro.set(null);
     forkJoin({
@@ -138,15 +179,22 @@ export class UsinaDetalheComponent {
   }
 
   carregarCurva(): void {
-    this.api.curva(this.id, this.dataCurva()).subscribe({
+    const data = this.dataCurva();
+    this.api.curva(this.id, data).subscribe({
       next: c => this.curva.set(c),
       error: () => this.curva.set(null),
+    });
+    if (data === this.hoje) return;
+    this.api.geracaoDiaria(this.id, data, data).subscribe({
+      next: p => this.dadosDia.set(p.dias[0] ?? null),
+      error: () => this.dadosDia.set(null),
     });
   }
 
   mudarDia(data: string): void {
     if (!data) return;
     this.dataCurva.set(data);
+    this.dadosDia.set(null);
     this.carregarCurva();
   }
 
