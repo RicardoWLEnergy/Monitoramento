@@ -2,7 +2,7 @@
 Coleta automática (usada pelo comando `python manage.py coletar`).
 
 - ciclo_tempo_real(): a cada 5 min — status, potência, energia de hoje e um ponto da curva
-  de todas as usinas ATIVAS (FoxESS e Huawei).
+  de todas as usinas ATIVAS (FoxESS, Huawei e Sungrow).
 - rotina_diaria(): 1x por dia — energia diária dos últimos dias (corrige o dia anterior),
   curva oficial de ontem e manutenção das partições das leituras.
 - processar_fila(): importações de histórico pedidas na tela, em pedaços, só no tempo livre
@@ -25,8 +25,9 @@ from monitoramento.models import ImportacaoHistorico
 from monitoramento.particoes import criar_particoes, remover_particoes_antigas
 from usinas.models import Plataforma, Usina
 
-from . import clima, coleta, coleta_huawei
+from . import clima, coleta, coleta_huawei, coleta_sungrow
 from .huawei import HuaweiLoginErro
+from .sungrow import SungrowLimiteErro, SungrowLoginErro
 
 log = logging.getLogger('coletor')
 
@@ -39,6 +40,7 @@ class Clientes:
     """Conexões com as APIs, criadas sob demanda e reaproveitadas."""
     _foxess: object = None
     _huawei: object = None
+    _sungrow: object = None
     curva_huawei_bloqueada: bool = False   # 401: interface não liberada na conta Northbound
 
     def foxess(self):
@@ -50,6 +52,21 @@ class Clientes:
         if self._huawei is None:
             self._huawei = coleta_huawei.cliente_huawei()
         return self._huawei
+
+    def sungrow(self):
+        if self._sungrow is None:
+            self._sungrow = coleta_sungrow.cliente_sungrow()
+        return self._sungrow
+
+    def api_e_modulo(self, plataforma: str):
+        """Cliente da API e módulo de coleta da plataforma (None se ela não tiver coleta)."""
+        if plataforma == Plataforma.FOXESS:
+            return self.foxess(), coleta
+        if plataforma == Plataforma.HUAWEI:
+            return self.huawei(), coleta_huawei
+        if plataforma == Plataforma.SUNGROW:
+            return self.sungrow(), coleta_sungrow
+        return None, None
 
 
 @dataclass
@@ -69,6 +86,7 @@ def ciclo_tempo_real(clientes: Clientes) -> Resumo:
     tarefas = [
         (Plataforma.FOXESS, lambda: coleta.atualizar_tempo_real(api=clientes.foxess())),
         (Plataforma.HUAWEI, lambda: coleta_huawei.atualizar_tempo_real(api=clientes.huawei())),
+        (Plataforma.SUNGROW, lambda: coleta_sungrow.atualizar_tempo_real(api=clientes.sungrow())),
     ]
     for plataforma, tarefa in tarefas:
         if not _tem_usinas(plataforma):
@@ -78,6 +96,9 @@ def ciclo_tempo_real(clientes: Clientes) -> Resumo:
             resumo.inversores += r.inversores
             resumo.leituras += r.leituras
             resumo.erros += [f'{plataforma}: {f}' for f in r.falhas]
+        except (SungrowLoginErro, SungrowLimiteErro) as erro:   # sem insistir: tenta no próximo ciclo
+            log.warning('Sungrow: %s — tenta no próximo ciclo.', erro)
+            resumo.erros.append(f'{plataforma}: {erro}')
         except Exception as erro:   # noqa: BLE001 — o coletor nunca pode parar por causa de uma plataforma
             log.exception('Tempo real %s falhou', plataforma)
             resumo.erros.append(f'{plataforma}: {erro}')
@@ -124,11 +145,8 @@ def rotina_diaria(clientes: Clientes, dias_energia: int = 3) -> Resumo:
 
     for usina in Usina.objects.ativas().prefetch_related('inversores'):
         try:
-            if usina.plataforma == Plataforma.FOXESS:
-                api, modulo = clientes.foxess(), coleta
-            elif usina.plataforma == Plataforma.HUAWEI:
-                api, modulo = clientes.huawei(), coleta_huawei
-            else:
+            api, modulo = clientes.api_e_modulo(usina.plataforma)
+            if modulo is None:
                 continue
 
             r = modulo.importar_geracao_diaria(usina, hoje - timedelta(days=dias_energia - 1), hoje, api=api)
@@ -154,10 +172,11 @@ def rotina_diaria(clientes: Clientes, dias_energia: int = 3) -> Resumo:
 # ----------------------------------------------------------------------------
 # Fila de importações de histórico (pedidas pela tela)
 # ----------------------------------------------------------------------------
-# Tamanho do pedaço de curva: FoxESS busca 1 dia por chamada; Huawei, até 3 dias por chamada
-DIAS_POR_PASSO_CURVA = {Plataforma.FOXESS: 1, Plataforma.HUAWEI: 3}
+# Tamanho do pedaço de curva: FoxESS busca 1 dia por chamada; Huawei, até 3 dias por chamada;
+# Sungrow, 1 dia (5 chamadas de 3 h)
+DIAS_POR_PASSO_CURVA = {Plataforma.FOXESS: 1, Plataforma.HUAWEI: 3, Plataforma.SUNGROW: 1}
 # Erros passageiros: a importação pausa e tenta de novo depois (não avança o cursor)
-ERROS_PASSAGEIROS = (requests.RequestException, HuaweiLoginErro)
+ERROS_PASSAGEIROS = (requests.RequestException, HuaweiLoginErro, SungrowLoginErro, SungrowLimiteErro)
 PAUSA_APOS_ERRO = timedelta(minutes=10)
 AVISO_CURVA_HUAWEI = ('Curva de 5 min não liberada na conta Northbound; '
                       'a curva destes dias fica só com as leituras do tempo real.')
@@ -227,16 +246,13 @@ def _ir_para_curva_ou_concluir(imp: ImportacaoHistorico, clientes: Clientes) -> 
 
 
 def executar_passo(imp: ImportacaoHistorico, clientes: Clientes) -> None:
-    """Um pedaço da importação: 1 mês de energia diária ou 1 dia (FoxESS) / 3 dias (Huawei) de curva."""
+    """Um pedaço da importação: 1 mês de energia diária ou 1 dia (FoxESS, Sungrow) / 3 dias (Huawei) de curva."""
     usina = imp.usina
     try:
         if not usina.ativa:
             raise ValueError('A usina foi apagada.')
-        if usina.plataforma == Plataforma.FOXESS:
-            api, modulo = clientes.foxess(), coleta
-        elif usina.plataforma == Plataforma.HUAWEI:
-            api, modulo = clientes.huawei(), coleta_huawei
-        else:
+        api, modulo = clientes.api_e_modulo(usina.plataforma)
+        if modulo is None:
             raise ValueError('Esta plataforma não tem importação de histórico.')
 
         if imp.status == Imp.Status.FILA:

@@ -26,6 +26,8 @@ from usuarios.models import Usuario
 
 from .foxess import FoxESSCliente, FoxESSErro
 from .huawei import TIPOS_INVERSOR, HuaweiCliente, HuaweiErro
+from .sungrow import TIPOS_INVERSOR as TIPOS_INVERSOR_SUNGROW
+from .sungrow import SungrowCliente, SungrowErro, SungrowLimiteErro, SungrowLoginErro
 
 # status do inversor na FoxESS (device/list e device/detail)
 STATUS_FOXESS = {1: Status.ONLINE, 2: Status.ALERTA, 3: Status.OFFLINE}
@@ -75,7 +77,16 @@ def cadastrar_por_sn(plataforma: str, sn: str, cliente: Usuario) -> ResultadoCad
         return _cadastrar_foxess(sn, cliente)
     if plataforma == Plataforma.HUAWEI:
         return _cadastrar_huawei(sn, cliente)
+    if plataforma == Plataforma.SUNGROW:
+        return _cadastrar_sungrow(sn, cliente)
     raise CadastroErro(f'Plataforma desconhecida: {plataforma}')
+
+
+def _coordenada(valor) -> Decimal | None:
+    try:
+        return round(Decimal(str(valor)), 6)
+    except Exception:
+        return None
 
 
 def _modelo_valido(valor) -> str:
@@ -196,7 +207,12 @@ def _gravar(plataforma: str, id_usina: str, cliente: Usuario, usina: dict, inver
         if not obj.inicio_operacao and usina.get('inicio_operacao'):   # usina antiga ainda sem a data
             obj.inicio_operacao = usina['inicio_operacao']
             obj.save(update_fields=['inicio_operacao'])
+        # Potência nominal já preenchida (pela plataforma ou pela equipe) não é sobrescrita
+        com_potencia = set(Inversor.objects.filter(numero_serie__in=inversores, potencia_nominal_kw__gt=0)
+                           .values_list('numero_serie', flat=True))
         for numero, dados in inversores.items():
+            if numero in com_potencia:
+                dados = {k: v for k, v in dados.items() if k != 'potencia_nominal_kw'}
             Inversor.objects.update_or_create(numero_serie=numero, defaults={'usina': obj, **dados})
         ja_vinculado = obj.usuarios.filter(pk=cliente.pk).exists()
         obj.usuarios.add(cliente)
@@ -254,20 +270,14 @@ def _cadastrar_huawei(sn: str, cliente: Usuario) -> ResultadoCadastro:
         saude = 0
     status = STATUS_SAUDE_HUAWEI.get(saude, Status.OFFLINE)
 
-    def coordenada(valor):
-        try:
-            return round(Decimal(str(valor)), 6)
-        except Exception:
-            return None
-
     return _gravar(
         Plataforma.HUAWEI, codigo, cliente,
         usina={
             'nome': (info.get('plantName') or f'Usina {sn}').strip(),
             'fabricante': Fabricante.HUAWEI,
             'endereco': (info.get('plantAddress') or '').strip(),
-            'latitude': coordenada(info.get('latitude')),
-            'longitude': coordenada(info.get('longitude')),
+            'latitude': _coordenada(info.get('latitude')),
+            'longitude': _coordenada(info.get('longitude')),
             'potencia_kwp': _decimal(info.get('capacity')),   # confirmado: vem em kWp
             'inicio_operacao': data_conexao_huawei(info.get('gridConnectionDate')),
             'status': status,
@@ -280,3 +290,105 @@ def _cadastrar_huawei(sn: str, cliente: Usuario) -> ResultadoCadastro:
             'status': status,
         } for d in inversores},
     )
+
+
+# ----------------------------------------------------------------------------
+# Sungrow iSolarCloud
+# ----------------------------------------------------------------------------
+def potencia_pelo_modelo_sungrow(modelo: str) -> Decimal:
+    """'SG10RT' -> 10 · 'SG5.0RS' -> 5.0 · 'SG110CX' -> 110 · 'SH10RT' (híbrido) -> 10 (kW nominal)."""
+    achado = re.match(r'S[GH]-?(\d+(?:\.\d+)?)', (modelo or '').strip(), re.IGNORECASE)
+    return _decimal(achado.group(1)) if achado else Decimal('0')
+
+
+def data_conexao_sungrow(valor) -> date | None:
+    """grid_connection_time 20230303115625 ou install_date '2022-11-07 15:37:40' -> data."""
+    texto = str(valor or '').strip()
+    for formato, tamanho in (('%Y%m%d', 8), ('%Y-%m-%d', 10)):
+        try:
+            return _data_valida(datetime.strptime(texto[:tamanho], formato).date())
+        except ValueError:
+            continue
+    return None
+
+
+def _status_sungrow(dispositivo: dict) -> str:
+    """Só para o 1º cadastro (a coleta de 5 min corrige): dev_fault_status 1 = falha; dev_status 1 = comunicando."""
+    if str(dispositivo.get('dev_fault_status')) == '1':
+        return Status.ALERTA
+    return Status.ONLINE if str(dispositivo.get('dev_status')) == '1' else Status.OFFLINE
+
+
+def _cadastrar_sungrow(sn: str, cliente: Usuario) -> ResultadoCadastro:
+    """
+    Acha a usina pela SN (getPowerStationDetail aceita a SN do inversor ou do comunicador). Se não achar,
+    procura a SN no tempo real (inversor e, depois, híbrido) e pega o detalhe pelo ps_id.
+    Depois lista os inversores da usina.
+    """
+    from .coleta_sungrow import PONTOS, fuso_sungrow
+
+    try:
+        api = SungrowCliente()
+        try:
+            info = api.detalhe_usina_por_sn(sn)
+        except (SungrowLoginErro, SungrowLimiteErro):
+            raise
+        except SungrowErro:
+            info = {}
+        if not info.get('ps_id'):
+            info = _usina_pelo_tempo_real(api, sn, PONTOS)
+        if not info.get('ps_id'):
+            raise CadastroErro(f'Inversor {sn} não encontrado na conta Sungrow. Confira a SN.')
+        ps_id = info['ps_id']
+        dispositivos = api.dispositivos_da_usina(ps_id)
+    except SungrowLoginErro as erro:
+        raise CadastroErro('Não foi possível entrar na conta Sungrow configurada no servidor. '
+                           'Confira o usuário e a senha da Sungrow.') from erro
+    except SungrowErro as erro:
+        raise CadastroErro(f'Falha ao consultar a Sungrow: {erro}') from erro
+
+    inversores = [d for d in dispositivos if int(_decimal(d.get('device_type'), 0)) in TIPOS_INVERSOR_SUNGROW
+                  and d.get('device_sn') and d.get('ps_key')]
+    if not inversores:
+        raise CadastroErro(f'A usina do inversor {sn} não tem inversores na Sungrow.')
+    status_inv = {d['device_sn'].upper(): _status_sungrow(d) for d in inversores}
+
+    return _gravar(
+        Plataforma.SUNGROW, str(ps_id), cliente,
+        usina={
+            'nome': (info.get('ps_name') or f'Usina {sn}').strip(),
+            'fabricante': Fabricante.SUNGROW,
+            'endereco': (info.get('ps_location') or '').strip()[:255],
+            'latitude': _coordenada(info.get('latitude')),
+            'longitude': _coordenada(info.get('longitude')),
+            'fuso_horario': fuso_sungrow(info.get('ps_current_time_zone')),
+            'potencia_kwp': _decimal(float(_decimal(info.get('design_capacity') or info.get('install_power'), 3))
+                                     / 1000),   # vem em Wp
+            'inicio_operacao': (data_conexao_sungrow(info.get('grid_connection_time'))
+                                or data_conexao_sungrow(info.get('install_date'))),
+            'status': status_da_usina(list(status_inv.values())),
+        },
+        inversores={d['device_sn'].upper(): {
+            'id_externo': str(d['ps_key']),
+            'tipo_externo': str(d.get('device_type')),
+            'modelo': (d.get('device_model_code') or '').strip(),
+            'potencia_nominal_kw': potencia_pelo_modelo_sungrow(d.get('device_model_code')),
+            'status': status_inv[d['device_sn'].upper()],
+        } for d in inversores},
+    )
+
+
+def _usina_pelo_tempo_real(api: SungrowCliente, sn: str, pontos: dict) -> dict:
+    """SN no tempo real de inversores (e de híbridos) → ps_id → detalhe da usina. {} se não achar."""
+    for tipo in TIPOS_INVERSOR_SUNGROW:
+        try:
+            itens = api.tempo_real_dispositivos(tipo, list(pontos[tipo]), sns=[sn])
+        except (SungrowLoginErro, SungrowLimiteErro):
+            raise
+        except SungrowErro:
+            continue          # SN não é deste tipo
+        achado = next((d for d in itens if (d.get('device_sn') or '').upper() == sn and d.get('ps_id')), None)
+        if achado:
+            detalhes = api.detalhe_usinas([achado['ps_id']])
+            return detalhes[0] if detalhes else {'ps_id': achado['ps_id']}
+    return {}

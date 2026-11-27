@@ -139,6 +139,20 @@ class UsinasApiTests(UsinasApiBase):
         self.assertEqual((meses[-1]['gerado_kwh'], meses[-1]['esperado_kwh'], meses[-1]['parcial']),
                          (30.0, 900.0, True))
 
+    def test_potencia_nominal_dos_inversores_equipe_corrige_cliente_nao(self):
+        inv = Inversor.objects.get(numero_serie='SN-MINHA')
+        url = f'/api/usinas/{self.minha.pk}/inversores/'
+        self.entrar(self.cliente)
+        self.assertEqual(self.client.put(url, [{'id': inv.pk, 'potencia_nominal_kw': 10}], format='json').status_code, 403)
+        self.entrar(self.colab)
+        r = self.client.put(url, [{'id': inv.pk, 'potencia_nominal_kw': 10}], format='json')
+        self.assertEqual((r.status_code, r.data[0]['potencia_nominal_kw']), (200, 10))
+        outro = Inversor.objects.create(usina=self.alheia, numero_serie='SN-ALHEIO')
+        r = self.client.put(url, [{'id': outro.pk, 'potencia_nominal_kw': 5}], format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Inversor.objects.get(pk=outro.pk).potencia_nominal_kw, 0)
+        self.assertEqual(self.client.put(url, [{'id': inv.pk, 'potencia_nominal_kw': -1}], format='json').status_code, 400)
+
     def test_geracao_esperada_equipe_altera_cliente_nao(self):
         corpo = [{'mes': m, 'energia_kwh': 1000 + m} for m in range(1, 13)]
         url = f'/api/usinas/{self.minha.pk}/geracao-esperada/'

@@ -88,12 +88,23 @@ export class UsinaDetalheComponent {
   private id = 0;
   private ultimaAtualizacao = 0;
 
+  /**
+   * Capacidade dos inversores (kW): o limite real da potência gerada. Os módulos (kWp) costumam somar mais
+   * que os inversores, então a geração nunca chega a 100% do kWp. Null se algum inversor está sem potência nominal.
+   */
+  readonly capacidadeInversores = computed(() => {
+    const lista = this.inversores();
+    if (!lista.length || lista.some(i => !i.potencia_nominal_kw)) return null;
+    return lista.reduce((soma, i) => soma + i.potencia_nominal_kw, 0);
+  });
+
   /** Cards de hoje (modo Dia no dia atual). */
   readonly resumo = computed(() => {
     const u = this.usina();
     if (!u) return null;
+    const capacidade = this.capacidadeInversores();
     return {
-      usoPct: u.potencia_kwp ? (u.potencia_atual_kw / u.potencia_kwp) * 100 : 0,
+      usoPct: capacidade ? (u.potencia_atual_kw / capacidade) * 100 : null,
       hojePct: pctDoEsperado(u.geracao_hoje_kwh, u.esperado_hoje_kwh),
       picoKw: picoDaCurva(this.curva()?.pontos ?? [])?.kw ?? 0,
     };

@@ -10,6 +10,7 @@ class Plataforma(models.TextChoices):
     """De onde vêm os dados da usina (nuvem de monitoramento)."""
     FOXESS = 'foxess', 'FoxESS Cloud'
     HUAWEI = 'huawei', 'Huawei FusionSolar'
+    SUNGROW = 'sungrow', 'Sungrow iSolarCloud'
 
 
 class Fabricante(models.TextChoices):
@@ -17,6 +18,7 @@ class Fabricante(models.TextChoices):
     WEG = 'weg', 'WEG'
     FOXESS = 'foxess', 'FoxESS'
     HUAWEI = 'huawei', 'Huawei'
+    SUNGROW = 'sungrow', 'Sungrow'
 
 
 class Status(models.TextChoices):
@@ -44,7 +46,7 @@ class Usina(models.Model):
     plataforma = models.CharField('plataforma', max_length=10, choices=Plataforma.choices)
     id_externo = models.CharField(
         'ID na plataforma', max_length=100,
-        help_text='Identificador da usina na plataforma (FoxESS: stationID; Huawei: plantCode).',
+        help_text='Identificador da usina na plataforma (FoxESS: stationID; Huawei: plantCode; Sungrow: ps_id).',
     )
     fabricante = models.CharField(
         'fabricante dos inversores', max_length=10, choices=Fabricante.choices,
@@ -127,11 +129,12 @@ class Inversor(models.Model):
     numero_serie = models.CharField('número de série (SN)', max_length=60, unique=True)
     id_externo = models.CharField(
         'ID na plataforma', max_length=100, blank=True,
-        help_text='Huawei usa um ID próprio do equipamento; na FoxESS é a própria SN.',
+        help_text='Huawei usa um ID próprio do equipamento; Sungrow, o ps_key; na FoxESS é a própria SN.',
     )
     tipo_externo = models.CharField(
         'tipo na plataforma', max_length=10, blank=True,
-        help_text='Huawei: devTypeId (1 = inversor string, 38 = residencial). Vazio na FoxESS.',
+        help_text='Huawei: devTypeId (1 = inversor string, 38 = residencial). Sungrow: device_type '
+                  '(1 = inversor, 14 = híbrido). Vazio na FoxESS.',
     )
     modelo = models.CharField('modelo', max_length=100, blank=True)
     potencia_nominal_kw = models.DecimalField('potência nominal (kW)', max_digits=8, decimal_places=2, default=0)
@@ -168,3 +171,4 @@ class GeracaoEsperada(models.Model):
 
     def __str__(self):
         return f'{self.usina} · mês {self.mes}: {self.energia_kwh} kWh'
+

@@ -2,14 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import * as echarts from 'echarts/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, MarkAreaComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { TemaService } from './tema.service';
 import { diaMesBR } from './periodo';
 import { ClimaDia, DiaGeracao, MesGeracao, PontoCurva, ROTULO_CLIMA } from './usinas.service';
 
 // Só os módulos usados entram no pacote (tree-shaking)
-echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, MarkAreaComponent, CanvasRenderer]);
 
 /** Use nos componentes com gráfico: providers: [provideEchartsCore({ echarts })] */
 export { echarts };
@@ -20,6 +20,8 @@ interface Cores {
 }
 
 const AREA_ACENTO = 'rgba(239, 150, 0, 0.10)';
+/** Faixa "Sem dados" na curva: cinza translúcido, legível nos temas claro e escuro. */
+const FAIXA_SEM_DADOS = 'rgba(128, 128, 128, 0.12)';
 
 const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
@@ -36,6 +38,46 @@ const imagemClima = (desenho: string, cor: string) => 'data:image/svg+xml;utf8,'
 export const textoClima = (c: ClimaDia) =>
   (ROTULO_CLIMA[c.condicao] ?? '') + (c.chuva_mm >= 1 ? ` · ${numeroBR(c.chuva_mm, 0)} mm` : '');
 
+/** Buraco na curva a partir do qual aparece a faixa "Sem dados" (3 blocos de 5 min = 15 min). */
+const BLOCOS_SEM_DADOS = 3;
+/** A faixa só leva o texto "Sem dados" se tiver 1 h ou mais (em faixa estreita o texto fica no mouse/toque). */
+const BLOCOS_COM_TEXTO = 12;
+
+interface Buraco { de: number; ate: number; }   // índices do primeiro e do último bloco sem leitura
+
+const minutos = (hora: string) => +hora.slice(0, 2) * 60 + +hora.slice(3, 5);
+const horaDe = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/**
+ * Dia contínuo, de 5 em 5 min, da primeira à última leitura: horário sem leitura vira null (a linha se
+ * interrompe e o tempo aparece no eixo). Buraco curto (uma coleta perdida) é ligado pela média dos vizinhos;
+ * a partir de 15 min vira "Sem dados" (desligamento da rede, inversor desligado, sem comunicação).
+ */
+function curvaContinua(pontos: PontoCurva[]): { horas: string[]; kw: (number | null)[]; buracos: Buraco[] } {
+  if (!pontos.length) return { horas: [], kw: [], buracos: [] };
+  const porMinuto = new Map(pontos.map(p => [minutos(p.hora), p.kw]));
+  const inicio = minutos(pontos[0].hora), fim = minutos(pontos[pontos.length - 1].hora);
+  const horas: string[] = [], kw: (number | null)[] = [];
+  for (let m = inicio; m <= fim; m += 5) {
+    horas.push(horaDe(m));
+    kw.push(porMinuto.get(m) ?? null);
+  }
+  const buracos: Buraco[] = [];
+  for (let i = 0; i < kw.length; i++) {
+    if (kw[i] !== null) continue;
+    let j = i;
+    while (j + 1 < kw.length && kw[j + 1] === null) j++;
+    if (j - i + 1 >= BLOCOS_SEM_DADOS) {
+      buracos.push({ de: i, ate: j });
+    } else {
+      const antes = kw[i - 1] ?? 0, depois = kw[j + 1] ?? 0;
+      for (let k = i; k <= j; k++) kw[k] = antes + ((depois - antes) * (k - i + 1)) / (j - i + 2);
+    }
+    i = j;
+  }
+  return { horas, kw, buracos };
+}
+
 export const numeroBR = (v: number, casas = 0) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
@@ -48,28 +90,46 @@ export const numeroBR = (v: number, casas = 0) =>
 export class GraficosService {
   private readonly tema = inject(TemaService);
 
-  /** Curva de potência do dia — série única (sem legenda), área suave em laranja. */
+  /**
+   * Curva de potência do dia — série única (sem legenda), área suave em laranja. O eixo é o dia contínuo:
+   * período sem leitura (ex.: desligamento da rede) aparece como faixa cinza "Sem dados", não some do eixo.
+   */
   curvaPotencia(pontos: PontoCurva[]): EChartsCoreOption {
     const c = this.cores();
     const b = this.base(c);
+    const { horas, kw, buracos } = curvaContinua(pontos);
+    const buracoDe = (i: number) => buracos.find(x => i >= x.de && i <= x.ate);
     return {
       ...b.comum,
       tooltip: {
         ...b.tooltip, trigger: 'axis',
         axisPointer: { type: 'line', lineStyle: { color: c.secundario, width: 1 } },
-        formatter: (p: { axisValue: string; value: number }[]) =>
-          `<span style="color:${c.secundario}">${p[0].axisValue}</span><br><b>${numeroBR(p[0].value, 1)} kW</b>`,
+        formatter: (p: { axisValue: string; value: number | null; dataIndex: number }[]) => {
+          const buraco = p[0].value == null ? buracoDe(p[0].dataIndex) : undefined;
+          return buraco
+            ? `<span style="color:${c.secundario}">${horas[buraco.de]}–${horas[buraco.ate]}</span><br><b>Sem dados</b>`
+            : `<span style="color:${c.secundario}">${p[0].axisValue}</span><br><b>${numeroBR(p[0].value ?? 0, 1)} kW</b>`;
+        },
       },
       xAxis: {
-        type: 'category', boundaryGap: false, data: pontos.map(p => p.hora), ...b.eixoX,
+        type: 'category', boundaryGap: false, data: horas, ...b.eixoX,
         axisLabel: { ...b.eixoX.axisLabel, interval: (_: number, v: string) => v.endsWith(':00') && +v.slice(0, 2) % 2 === 0 },
       },
       yAxis: this.eixoY(b, c, 'kW'),
       series: [{
-        name: 'Potência', type: 'line', data: pontos.map(p => p.kw),
+        name: 'Potência', type: 'line', data: kw, connectNulls: false,
         smooth: 0.3, symbol: 'none', showSymbol: false,
         lineStyle: { width: 2, color: c.acento, cap: 'round', join: 'round' },
         itemStyle: { color: c.acento }, areaStyle: { color: AREA_ACENTO }, emphasis: { disabled: true },
+        markArea: {
+          silent: true,
+          itemStyle: { color: FAIXA_SEM_DADOS },
+          label: { color: c.secundario, fontSize: 11, fontFamily: 'Inter', position: 'insideTop' },
+          data: buracos.map(x => [
+            { xAxis: horas[Math.max(x.de - 1, 0)], name: x.ate - x.de + 1 >= BLOCOS_COM_TEXTO ? 'Sem dados' : '' },
+            { xAxis: horas[Math.min(x.ate + 1, horas.length - 1)] },
+          ]),
+        },
       }],
     };
   }

@@ -373,11 +373,11 @@ h1, h3, h4 { font-family: var(--font-display); letter-spacing: var(--tracking-ti
 
 **Backend** — apps: `usuarios/` (login, perfis, `permissoes.py`), `usinas/`, `monitoramento/`
 (leituras, geração diária, alertas, consultas do dashboard, partições), `integracoes/`
-(clientes FoxESS e Huawei, cadastro por SN, coleta, coletor). Cada app usa os arquivos padrão do
+(clientes FoxESS, Huawei e Sungrow, cadastro por SN, coleta, coletor). Cada app usa os arquivos padrão do
 Django (`models`, `serializers`, `views`, `urls`, `admin`, `tests*.py`, `migrations/`).
 
 **Frontend** — só duas pastas em `src/app/`:
-- `pages/` → uma pasta por tela (login, shell/layout, visao-geral, usinas, usina-detalhe, clientes, usuarios);
+- `pages/` → uma pasta por tela (login, shell/layout, visao-geral, usinas, usina-detalhe, projeto, clientes, usuarios);
 - `services/` → chamadas à API, login/JWT (guard + interceptor), gráficos, tema, formatação.
 Nada de `core/`, `shared/`, `layout/` etc.
 
@@ -389,7 +389,10 @@ Nada de `core/`, `shared/`, `layout/` etc.
 - **Só entra no banco o que for cadastrado**: cliente + plataforma + **SN de um inversor** → o sistema
   busca a usina inteira na plataforma (`integracoes/cadastro.py`). Não existe criar usina pela API.
 - **Dados cadastrais da usina** (nome, endereço, kWp, coordenadas, fuso) vêm da plataforma só no
-  1º cadastro; depois valem as edições da equipe. Inversores, status e fabricante seguem a plataforma.
+  1º cadastro; depois valem as edições da equipe. Inversores, status e fabricante seguem a plataforma,
+  exceto a **potência nominal do inversor**: a equipe preenche quando a plataforma não informa, e um valor
+  já preenchido nunca é sobrescrito no recadastro. A "Potência agora" é comparada com a soma dos inversores
+  (o kWp dos módulos é maior e nunca é atingido).
 - **"Apagar" usina = desativar** (`ativa=False`, só Admin, confirma digitando o nome): some do sistema,
   perde os vínculos, o histórico fica; recadastrar uma SN dela a reativa.
 - **Usuários não são excluídos**, só desativados; ninguém desativa ou rebaixa a si mesmo.
@@ -405,10 +408,14 @@ Nada de `core/`, `shared/`, `layout/` etc.
 - **Huawei FusionSolar**: conta Northbound (host `la5`); **uma conta por ambiente** (sessão única);
   5 senhas erradas bloqueiam por 30 min. Curva histórica de 5 min (`getDevHistoryKpi`) não liberada
   na conta atual (401) — a curva se forma pela coleta em tempo real.
+- **Sungrow iSolarCloud**: OpenAPI no modo usuário (login com usuário/senha da conta; cabeçalhos `sys_code: 901`
+  e `x-access-key`; token no corpo, 24 h deslizantes). Login recusado (`login_state` ≠ 1) suspende novas
+  tentativas por 30 min — senhas erradas repetidas bloqueiam a conta. Valores em W/Wh. Dados da usina pelo
+  ps_key `{ps_id}_11_0_0`. Histórico sem o dia de hoje. Limites E901/E999/E998: parar e tentar depois.
 - Credenciais só no `backend/.env` (nunca no git).
 
 ## Testes
 - Backend: `manage.py test` (deve terminar em `OK`). **Nenhum teste acessa as APIs reais** — sempre
-  simular a FoxESS/Huawei com respostas no formato real.
+  simular a FoxESS/Huawei/Sungrow com respostas no formato real.
 - O frontend não tem testes automatizados (estrutura Karma/Jasmine removida de propósito);
   conferir com `ng build` sem erros nem avisos.

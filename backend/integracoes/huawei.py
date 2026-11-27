@@ -78,7 +78,6 @@ class HuaweiCliente:
         self.sessao = requests.Session()
         self.sessao.headers.update({'Content-Type': 'application/json', 'User-Agent': USER_AGENT})
         self.token: str | None = None
-        self.chamadas = 0
         self._ultima_chamada: dict[str, float] = {}
         self._trava = threading.Lock()
         self._login_suspenso_ate = 0.0
@@ -89,7 +88,6 @@ class HuaweiCliente:
             raise HuaweiLoginErro('login', None, 'login suspenso por 30 min após uma recusa (evita bloquear a conta)')
         resposta = self.sessao.post(f'{self.base_url}/login', json={'userName': self.usuario, 'systemCode': self.senha},
                                     timeout=self.timeout)
-        self.chamadas += 1
         resposta.raise_for_status()
         dados = resposta.json() if resposta.content else {}
         token = resposta.headers.get('xsrf-token') or resposta.cookies.get('XSRF-TOKEN')
@@ -111,7 +109,6 @@ class HuaweiCliente:
             self.login()
         self._aguardar_vez(endpoint)
         resposta = self.sessao.post(f'{self.base_url}/{endpoint}', json=corpo or {}, timeout=self.timeout)
-        self.chamadas += 1
         resposta.raise_for_status()
         dados = resposta.json()
         codigo = dados.get('failCode')

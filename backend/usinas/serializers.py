@@ -105,6 +105,12 @@ class InversorSerializer(serializers.ModelSerializer):
                   'potencia_atual_kw', 'geracao_hoje_kwh', 'ultima_leitura']
 
 
+class PotenciaNominalSerializer(serializers.Serializer):
+    """Correção da potência nominal de um inversor (quando a plataforma não informa ou informa errado)."""
+    id = serializers.IntegerField()
+    potencia_nominal_kw = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=0, max_value=100000)
+
+
 class GeracaoEsperadaSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeracaoEsperada

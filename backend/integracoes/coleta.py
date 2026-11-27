@@ -196,7 +196,11 @@ def _tempo_real_da_usina(usina: Usina, dados: dict, agora: datetime, rel: Relato
             sem_comunicacao(inv, usina, agora)
         inv.save(update_fields=['potencia_atual_kw', 'geracao_hoje_kwh', 'status', 'ultima_leitura'])
         rel.inversores += 1
+    fechar_tempo_real(usina, lista, agora, rel)
 
+
+def fechar_tempo_real(usina: Usina, lista: list[Inversor], agora: datetime, rel: Relatorio) -> None:
+    """Com os inversores já atualizados: status da usina, ponto da curva e energia de hoje (FoxESS e Sungrow)."""
     usina.status = status_da_usina([i.status for i in lista])
     recentes = [i.ultima_leitura for i in lista if leitura_recente(i.ultima_leitura, usina, agora)]
     if recentes:

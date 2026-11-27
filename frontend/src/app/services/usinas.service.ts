@@ -4,13 +4,14 @@ import { Observable } from 'rxjs';
 
 /** 'noite' = sem geração por falta de sol (normal, não é problema). */
 export type StatusUsina = 'online' | 'noite' | 'alerta' | 'offline';
-export type Plataforma = 'foxess' | 'huawei';
+export type Plataforma = 'foxess' | 'huawei' | 'sungrow';
 
 export const ROTULO_STATUS: Record<StatusUsina, string> = { online: 'Online', noite: 'Sem sol', alerta: 'Alerta', offline: 'Offline' };
 export const CLASSE_STATUS: Record<StatusUsina, string> = { online: 'ok', noite: 'neutral', alerta: 'warn', offline: 'danger' };
 export const PLATAFORMAS: { valor: Plataforma; rotulo: string }[] = [
   { valor: 'foxess', rotulo: 'FoxESS Cloud' },
   { valor: 'huawei', rotulo: 'Huawei FusionSolar' },
+  { valor: 'sungrow', rotulo: 'Sungrow iSolarCloud' },
 ];
 
 export interface Pagina<T> { count: number; next: string | null; previous: string | null; results: T[]; }
@@ -191,6 +192,11 @@ export class UsinasService {
 
   geracaoEsperada(id: number): Observable<GeracaoEsperada[]> {
     return this.http.get<GeracaoEsperada[]>(`/api/usinas/${id}/geracao-esperada/`);
+  }
+
+  /** Corrige a potência nominal dos inversores (quando a plataforma não informa). */
+  salvarPotenciaInversores(id: number, valores: { id: number; potencia_nominal_kw: number }[]): Observable<Inversor[]> {
+    return this.http.put<Inversor[]>(`/api/usinas/${id}/inversores/`, valores);
   }
 
   salvarGeracaoEsperada(id: number, valores: GeracaoEsperada[]): Observable<GeracaoEsperada[]> {

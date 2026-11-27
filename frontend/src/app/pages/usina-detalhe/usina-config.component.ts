@@ -9,12 +9,12 @@ import { AuthService, mensagemDeErro } from '../../services/auth.service';
 import { plural } from '../../services/formato';
 import { diasAtras, isoLocal } from '../../services/periodo';
 import {
-  CoberturaHistorico, ConfigAlertas, DadosUsina, ImportacaoHistorico, UsinaDetalhe, UsinasService,
+  CoberturaHistorico, ConfigAlertas, DadosUsina, ImportacaoHistorico, Inversor, UsinaDetalhe, UsinasService,
 } from '../../services/usinas.service';
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-type Secao = 'dados' | 'alertas' | 'esperado' | 'clientes' | 'historico' | 'apagar';
+type Secao = 'dados' | 'inversores' | 'alertas' | 'esperado' | 'clientes' | 'historico' | 'apagar';
 
 /** Fusos do Brasil (IANA). */
 const FUSOS = ['America/Sao_Paulo', 'America/Bahia', 'America/Fortaleza', 'America/Recife', 'America/Belem',
@@ -29,6 +29,7 @@ const INTERVALO_PROGRESSO_MS = 5000;
 /**
  * Aba "Configurações" (Admin e Colaborador).
  * - Dados da usina: vêm da plataforma no 1º cadastro; Admin e Colaborador corrigem
+ * - Inversores: Admin e Colaborador preenchem a potência nominal quando a plataforma não informa
  * - Histórico de geração: pede a importação de dias anteriores; o servidor importa em segundo plano
  *   (pode fechar a página) e a tela mostra o progresso enquanto estiver aberta (Admin e Colaborador)
  * - Clientes vinculados: Admin e Colaborador
@@ -47,7 +48,10 @@ export class UsinaConfigComponent implements OnChanges {
   readonly auth = inject(AuthService);
 
   readonly usina = input.required<UsinaDetalhe>();
+  readonly inversores = input<Inversor[]>([]);
   readonly atualizada = output<UsinaDetalhe>();
+  /** Potência nominal salva: a tela da usina atualiza a capacidade dos inversores. */
+  readonly inversoresSalvos = output<Inversor[]>();
   /** Avisa a tela da usina para recarregar os gráficos depois de importar. */
   readonly importado = output<void>();
 
@@ -58,6 +62,8 @@ export class UsinaConfigComponent implements OnChanges {
   fusos = FUSOS;
   alertas!: ConfigAlertas;
   esperado: (number | null)[] = Array(12).fill(null);
+  /** Potência nominal em edição, por id do inversor. */
+  potencias: Record<number, number | null> = {};
 
   readonly salvando = signal<Secao | null>(null);
   readonly aviso = signal<Partial<Record<Secao, Aviso | null>>>({});
@@ -86,6 +92,7 @@ export class UsinaConfigComponent implements OnChanges {
   }
 
   ngOnChanges(): void {
+    this.potencias = Object.fromEntries(this.inversores().map(i => [i.id, i.potencia_nominal_kw || null]));
     const u = this.usina();
     this.dados = {
       nome: u.nome, endereco: u.endereco, cidade: u.cidade, uf: u.uf,
@@ -188,6 +195,23 @@ export class UsinaConfigComponent implements OnChanges {
       inicio_operacao: this.dados.inicio_operacao || null,
     };
     this.executar('dados', this.api.salvarDados(this.usina().id, dados), 'Dados salvos.');
+  }
+
+  salvarInversores(): void {
+    const valores = this.inversores().map(i => ({ id: i.id, potencia_nominal_kw: Number(this.potencias[i.id]) || 0 }));
+    this.salvando.set('inversores');
+    this.aviso.update(a => ({ ...a, inversores: null }));
+    this.api.salvarPotenciaInversores(this.usina().id, valores).subscribe({
+      next: lista => {
+        this.salvando.set(null);
+        this.aviso.update(a => ({ ...a, inversores: { tipo: 'ok', texto: 'Potência dos inversores salva.' } }));
+        this.inversoresSalvos.emit(lista);
+      },
+      error: e => {
+        this.salvando.set(null);
+        this.aviso.update(a => ({ ...a, inversores: { tipo: 'erro', texto: mensagemDeErro(e, 'Não foi possível salvar.') } }));
+      },
+    });
   }
 
   salvarAlertas(): void {

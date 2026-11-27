@@ -45,6 +45,34 @@
     </div>
   </section>
 
+  <!-- ---------- Inversores: potência nominal (Admin e Colaborador) ---------- -->
+  <section class="card">
+    <div>
+      <h3>Inversores</h3>
+      <span class="sub">Potência nominal de cada inversor: o limite da geração. Preencha quando a plataforma não informar.</span>
+    </div>
+    <div class="campos-col">
+      @for (inv of inversores(); track inv.id) {
+        <div class="inversor">
+          <span><strong class="num">{{ inv.numero_serie }}</strong><small>{{ inv.modelo || 'Modelo não informado' }}</small></span>
+          <label class="campo"><span class="label">Potência nominal (kW)</span>
+            <input class="input num" type="number" min="0" step="0.1" [name]="'pot-' + inv.id"
+                   [(ngModel)]="potencias[inv.id]" placeholder="Não informada"></label>
+        </div>
+      } @empty {
+        <div class="vazio pequeno">Nenhum inversor cadastrado.</div>
+      }
+      @if (inversores().length) {
+        <div class="rodape-secao">
+          @if (aviso()['inversores']; as a) { <span [class]="a.tipo === 'ok' ? 'ok-msg' : 'erro-msg'">{{ a.texto }}</span> }
+          <button class="btn primary" type="button" (click)="salvarInversores()" [disabled]="salvando() === 'inversores'">
+            {{ salvando() === 'inversores' ? 'Salvando...' : 'Salvar inversores' }}
+          </button>
+        </div>
+      }
+    </div>
+  </section>
+
   <!-- ---------- Histórico de geração ---------- -->
   <section class="card">
     <div>

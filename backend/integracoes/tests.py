@@ -163,12 +163,14 @@ class CadastroPorSnTests(TestCase):
         Cliente.return_value = api_fox_simulada()
         cadastrar_por_sn(Plataforma.FOXESS, 'SN-A', self.cliente)
         Usina.objects.update(nome='Nome corrigido', potencia_kwp=119.6, cidade='Brasília', status=Status.OFFLINE)
+        Inversor.objects.filter(numero_serie='SN-B').update(potencia_nominal_kw=25)   # a plataforma não informou
 
         outro = Usuario.objects.create_user('cli2@x.com', 'x', nome='Cliente 2')
         cadastrar_por_sn(Plataforma.FOXESS, 'SN-B', outro)
 
         u = Usina.objects.get()
         self.assertEqual((u.nome, str(u.potencia_kwp), u.cidade), ('Nome corrigido', '119.60', 'Brasília'))
+        self.assertEqual(str(Inversor.objects.get(numero_serie='SN-B').potencia_nominal_kw), '25.00')
         self.assertEqual(u.status, Status.ONLINE)   # o técnico (status) continua vindo da plataforma
 
     def test_sn_de_outra_conta_nao_grava_nada(self, Cliente):

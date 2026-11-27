@@ -29,7 +29,8 @@ export class UsinasComponent {
   readonly icones = { ChartLine, ChevronLeft, ChevronRight, Search, Settings };
   readonly rotuloStatus = ROTULO_STATUS;
   readonly classeStatus = CLASSE_STATUS;
-  readonly fabricantes = [{ valor: 'weg', rotulo: 'WEG' }, { valor: 'foxess', rotulo: 'FoxESS' }, { valor: 'huawei', rotulo: 'Huawei' }];
+  readonly fabricantes = [{ valor: 'weg', rotulo: 'WEG' }, { valor: 'foxess', rotulo: 'FoxESS' }, { valor: 'huawei', rotulo: 'Huawei' },
+                         { valor: 'sungrow', rotulo: 'Sungrow' }];
 
   // ---------- Filtros ----------
   readonly busca = signal('');

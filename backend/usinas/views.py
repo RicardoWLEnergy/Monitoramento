@@ -18,7 +18,7 @@ from usuarios.permissoes import ADMIN, EhAdmin, EhEquipe, perfil_de, usinas_visi
 from .models import GeracaoEsperada, Plataforma, Status, Usina
 from .serializers import (
     CAMPOS_ALERTAS, GeracaoEsperadaSerializer, ImportarHistoricoSerializer, InversorSerializer,
-    UsinaDetalheSerializer, UsinaEdicaoSerializer, UsinaListaSerializer, VinculoClientesSerializer,
+    PotenciaNominalSerializer, UsinaDetalheSerializer, UsinaEdicaoSerializer, UsinaListaSerializer, VinculoClientesSerializer,
 )
 
 
@@ -53,8 +53,8 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
             return [EhAdmin()]                       # "apagar": só Admin
         if self.action in ('partial_update', 'clientes', 'historico'):
             return [EhEquipe()]                      # editar, vincular clientes, importar histórico: Admin e Colaborador
-        if self.action == 'geracao_esperada' and self.request.method == 'PUT':
-            return [EhEquipe()]                      # prognóstico: Admin e Colaborador (alertas continuam só Admin)
+        if self.action in ('geracao_esperada', 'inversores') and self.request.method == 'PUT':
+            return [EhEquipe()]                      # prognóstico e potência dos inversores: Admin e Colaborador
         return super().get_permissions()
 
     def update(self, request, *args, **kwargs):
@@ -80,9 +80,22 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         })
 
     # ---------- dados de uma usina ----------
-    @action(detail=True)
+    @action(detail=True, methods=['get', 'put'])
     def inversores(self, request, pk=None):
-        return Response(InversorSerializer(self.get_object().inversores.all(), many=True).data)
+        """GET a lista · PUT [{"id": 5, "potencia_nominal_kw": 10}, ...] corrige a potência nominal (equipe)."""
+        usina = self.get_object()
+        if request.method == 'PUT':
+            dados = PotenciaNominalSerializer(data=request.data, many=True)
+            dados.is_valid(raise_exception=True)
+            por_id = {i.id: i for i in usina.inversores.all()}
+            if any(item['id'] not in por_id for item in dados.validated_data):
+                return Response({'detail': 'Inversor não pertence a esta usina.'}, status=400)
+            with transaction.atomic():
+                for item in dados.validated_data:
+                    inv = por_id[item['id']]
+                    inv.potencia_nominal_kw = item['potencia_nominal_kw']
+                    inv.save(update_fields=['potencia_nominal_kw'])
+        return Response(InversorSerializer(usina.inversores.all(), many=True).data)
 
     @action(detail=True)
     def curva(self, request, pk=None):
@@ -157,7 +170,7 @@ class UsinaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         if request.method == 'POST':
             dados = ImportarHistoricoSerializer(data=request.data)
             dados.is_valid(raise_exception=True)
-            if usina.plataforma not in (Plataforma.FOXESS, Plataforma.HUAWEI):
+            if usina.plataforma not in (Plataforma.FOXESS, Plataforma.HUAWEI, Plataforma.SUNGROW):
                 return Response({'detail': 'Esta plataforma não tem importação de histórico.'}, status=400)
             if usina.importacoes.filter(status__in=ImportacaoHistorico.ATIVOS).exists():
                 return Response({'detail': 'Já existe uma importação em andamento para esta usina.'}, status=409)

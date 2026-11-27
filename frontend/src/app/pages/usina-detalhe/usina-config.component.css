@@ -28,6 +28,15 @@ h3 { font-size: 16px; font-weight: 700; }
 .barra { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .barra div { height: 100%; background: var(--wl-orange); transition: width 200ms var(--ease-out); }
 
+/* Inversores (potência nominal) */
+.inversor {
+  display: grid; grid-template-columns: minmax(0, 1fr) 180px; align-items: end; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.inversor > span { display: grid; align-self: center; min-width: 0; }
+.inversor strong { overflow-wrap: anywhere; }
+.inversor small { color: var(--muted); font-size: 12px; }
+
 /* Clientes */
 .cliente {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -52,6 +61,6 @@ h3 { font-size: 16px; font-weight: 700; }
   .meses { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-  .campos, .dados { grid-template-columns: 1fr; }
+  .campos, .dados, .inversor { grid-template-columns: 1fr; }
   .meses { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

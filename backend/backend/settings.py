@@ -143,6 +143,13 @@ FOXESS_API_KEY = env('FOXESS_API_KEY', default='')
 HUAWEI_API_URL = env('HUAWEI_API_URL', default='https://la5.fusionsolar.huawei.com/thirdData')
 HUAWEI_USUARIO = env('HUAWEI_USUARIO', default='')
 HUAWEI_SENHA = env('HUAWEI_SENHA', default='')
+# Sungrow iSolarCloud (OpenAPI, modo usuário): chaves da aplicação criada no portal de desenvolvedor
+# + usuário e senha da conta da W.L no iSolarCloud
+SUNGROW_API_URL = env('SUNGROW_API_URL', default='https://gateway.isolarcloud.com.hk')
+SUNGROW_APPKEY = env('SUNGROW_APPKEY', default='')
+SUNGROW_ACCESS_KEY = env('SUNGROW_ACCESS_KEY', default='')
+SUNGROW_USUARIO = env('SUNGROW_USUARIO', default='')
+SUNGROW_SENHA = env('SUNGROW_SENHA', default='')
 # uazapi (WhatsApp): envio do código de acesso no login. URL = endereço do servidor no painel da uazapi
 UAZAPI_URL = env('UAZAPI_URL', default='')
 UAZAPI_TOKEN = env('UAZAPI_TOKEN', default='')   # token da INSTÂNCIA

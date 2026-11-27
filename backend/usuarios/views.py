@@ -20,6 +20,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from integracoes.cadastro import CadastroErro, cadastrar_por_sn
 from integracoes.foxess import FoxESSErro
 from integracoes.huawei import HuaweiErro
+from integracoes.sungrow import SungrowErro
 from integracoes.uazapi import UazapiErro, configurado, enviar_texto
 
 from .models import CodigoAcesso, Usuario, mascarar_whatsapp
@@ -250,7 +251,7 @@ class UsuarioViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.Retr
             r = cadastrar_por_sn(dados.validated_data['plataforma'], dados.validated_data['sn'], cliente)
         except (CadastroErro, ValueError) as erro:
             return Response({'detail': str(erro)}, status=status.HTTP_400_BAD_REQUEST)
-        except (requests.RequestException, FoxESSErro, HuaweiErro) as erro:
+        except (requests.RequestException, FoxESSErro, HuaweiErro, SungrowErro) as erro:
             log.warning('Cadastro por SN: plataforma indisponível: %s', erro)
             return Response({'detail': 'Não foi possível consultar a plataforma agora. Tente de novo em alguns minutos.'},
                             status=status.HTTP_502_BAD_GATEWAY)

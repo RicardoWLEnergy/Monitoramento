@@ -1,7 +1,7 @@
 # Monitoramento · W.L Energy
 
 Sistema de monitoramento das usinas fotovoltaicas da W.L Energy. Ele coleta a geração diretamente
-das plataformas dos fabricantes (**FoxESS Cloud** — inclui os inversores WEG — e **Huawei FusionSolar**)
+das plataformas dos fabricantes (**FoxESS Cloud** — inclui os inversores WEG —, **Huawei FusionSolar** e **Sungrow iSolarCloud**)
 e mostra tudo em um painel web com acesso por perfil.
 
 | Camada | Tecnologia |
@@ -63,7 +63,7 @@ Monitoramento/
 │   ├── usuarios/              login, perfis, permissões, API de usuários
 │   ├── usinas/                usinas, inversores, geração esperada, API de usinas
 │   ├── monitoramento/         leituras (particionadas por mês), geração diária, alertas, dashboard
-│   ├── integracoes/           FoxESS e Huawei: clientes das APIs, cadastro por SN, coleta, comandos
+│   ├── integracoes/           FoxESS, Huawei e Sungrow: clientes das APIs, cadastro por SN, coleta, comandos
 │   ├── requirements.txt       versões exatas dos pacotes Python
 │   ├── .env.example           modelo das configurações (sem senhas)
 │   └── .env                   configurações reais — NÃO vai para o git
@@ -173,6 +173,17 @@ O coletor fica rodando até `Ctrl + C`. Só um coletor pode rodar por vez (há u
 - A curva de 5 min do **histórico** (`getDevHistoryKpi`) ainda não está liberada na conta atual (erro 401):
   a energia diária funciona, e a curva de 5 min se forma pela coleta de tempo real daqui para frente.
 
+### Sungrow iSolarCloud (OpenAPI, modo usuário)
+- Aplicação criada no portal de desenvolvedor (developer-api.isolarcloud.com), região internacional
+  (`gateway.isolarcloud.com.hk`). No `.env`: `SUNGROW_APPKEY`, `SUNGROW_ACCESS_KEY` (a *secret key* da
+  aplicação), `SUNGROW_USUARIO` e `SUNGROW_SENHA` (login da conta da W.L no iSolarCloud).
+- O sistema faz login sozinho; o token vale 24 h e se renova a cada chamada. Vencido (E00003), loga de novo.
+- **Senhas erradas repetidas bloqueiam a conta**: depois de um login recusado o sistema para de tentar
+  por 30 min (vale para o coletor e para o cadastro).
+- Limites: E901 (frequente demais), E999 (por hora), E998 (por mês) — o coletor para e tenta no próximo ciclo.
+- Tempo real por inversor; energia diária e curva de 5 min por usina (ps_key `{ps_id}_11_0_0`).
+  O histórico não traz o dia de hoje.
+
 ### Google (planilha OBRAS e documentos da tela "Meu projeto")
 O cliente vê o andamento da obra pela linha da aba **OBRAS** cujo **Nº OBRA** = ID do cliente (campo do
 cadastro). O servidor lê a planilha (no máximo a cada 5 min) e entrega os documentos do Drive; o cliente nunca
@@ -234,7 +245,7 @@ Internet ──HTTPS──► web (Caddy) ─┬─ /api, /static → backend (D
                                  └─ resto         → telas do Angular (já compiladas)
 Servidor (só dentro dele) ── 127.0.0.1:8001 → backend  (painel /admin, por túnel SSH)
                     backend ──► db (PostgreSQL 17, volume dados_postgres)
-                    coletor ──► db   (manage.py coletar: FoxESS/Huawei a cada 5 min)
+                    coletor ──► db   (manage.py coletar: FoxESS/Huawei/Sungrow a cada 5 min)
                     backup  ──► db   (pg_dump diário em ./backups, mantém 14 dias)
 ```
 | Arquivo | Papel |
@@ -334,6 +345,7 @@ e, com o terminal aberto, acesse **http://localhost:8001/admin/**. Requisitos no
 | Erro 500 em todas as chamadas `/api` no Angular | o proxy deve apontar para `127.0.0.1:8000` (não `localhost`) — ver `frontend/proxy.conf.json` |
 | Huawei: `failCode=20400` no login | usuário/senha não são da conta **Northbound**, ou host errado |
 | Huawei: `failCode=401` | interface não liberada na conta Northbound |
+| Sungrow: `login` com "senha incorreta" / "conta não existe" | confira `SUNGROW_USUARIO`/`SUNGROW_SENHA`; o sistema só tenta de novo após 30 min |
 | FoxESS: `errno=41200` | instabilidade da FoxESS em uma rota; o cadastro já contorna |
 | `Já existe um coletor rodando` | outro `coletar` está aberto; encerre-o antes |
 | Inserir leitura dá erro de partição | rode `particoes_leitura` (o coletor faz isso todo dia) |

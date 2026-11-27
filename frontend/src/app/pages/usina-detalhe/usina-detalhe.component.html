@@ -24,7 +24,8 @@
             <lucide-icon [img]="icones.ExternalLink" [size]="12" [strokeWidth]="1.7" />
           </a>
         }
-        <span class="num">{{ u.potencia_kwp | number: '1.2-2' }} kWp</span>
+        <span class="num">{{ u.potencia_kwp | number: '1.2-2' }} kWp em módulos</span>
+        @if (capacidadeInversores(); as cap) { <span class="num">{{ cap | number: '1.1-1' }} kW em inversores</span> }
         <span>{{ inversores().length | i18nPlural: {'=1': '# inversor', 'other': '# inversores'} }}</span>
       </div>
     </div>
@@ -42,7 +43,8 @@
   }
 
   @if (aba() === 'configuracoes') {
-    <app-usina-config [usina]="u" (atualizada)="aoAtualizar($event)" (importado)="carregar()" />
+    <app-usina-config [usina]="u" [inversores]="inversores()" (atualizada)="aoAtualizar($event)"
+                      (inversoresSalvos)="inversores.set($event)" (importado)="carregar()" />
   } @else {
     @if (u.status === 'alerta' || u.status === 'offline') {
       <div class="alerta" [class.erro]="u.status === 'offline'">
@@ -69,7 +71,10 @@
         <div class="kpi">
           <div class="kpi-topo"><span class="label">Potência agora</span><lucide-icon [img]="icones.Zap" [size]="16" [strokeWidth]="1.7" /></div>
           <strong>{{ u.potencia_atual_kw | number: '1.1-1' }} kW</strong>
-          <small>{{ resumo()!.usoPct | number: '1.0-0' }}% da potência instalada</small>
+          <small>
+            @if (resumo()!.usoPct !== null) { {{ resumo()!.usoPct | number: '1.0-0' }}% da capacidade dos inversores }
+            @else { capacidade dos inversores não informada }
+          </small>
         </div>
         <div class="kpi">
           <div class="kpi-topo"><span class="label">Geração hoje</span><lucide-icon [img]="icones.Gauge" [size]="16" [strokeWidth]="1.7" /></div>
